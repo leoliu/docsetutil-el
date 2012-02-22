@@ -33,6 +33,7 @@
 
 (defvar docsetutil-program "/Developer/usr/bin/docsetutil")
 (defvar docsetutil-docset-path "/Developer/Documentation/DocSets/com.apple.adc.documentation.AppleSnowLeopard.CoreReference.docset")
+(defvar docsetutil-browse-url-function 'browse-url)
 (defvar docsetutil-search-history nil)
 
 (defconst docsetutil-api-regexp "^ \\(.*?\\)   \\(.*?\\) -- \\(.*\\)$")
@@ -71,7 +72,7 @@ The default value for BUFFER is current buffer."
           (save-match-data
             (cond
              ((string-match "\\.html" path)
-              (setq help-function 'browse-url
+              (setq help-function docsetutil-browse-url-function
                     help-args (list (concat "file://" path))))
              ((string-match "/man/man\\([1-9]\\)/\\(.*\\)\\.[1-9]\\." path)
               (setq help-function 'man
@@ -88,7 +89,7 @@ The default value for BUFFER is current buffer."
         ;; process full text results
         (while (re-search-forward "^ [0-9.]+ \\(.*\\)$" nil t)
           (setq path (match-string-no-properties 1))
-          (setq help-function 'browse-url)
+          (setq help-function docsetutil-browse-url-function)
           (if (save-match-data (url-type (url-generic-parse-url path)))
               (setq help-args (list path))
             (setq path (concat (expand-file-name "Contents/Resources/Documents/"
