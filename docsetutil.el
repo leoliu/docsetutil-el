@@ -73,7 +73,9 @@ The default value for BUFFER is current buffer."
             (cond
              ((string-match "\\.html" path)
               (setq help-function docsetutil-browse-url-function
-                    help-args (list (concat "file://" path))))
+                    help-args (list (if (url-type (url-generic-parse-url path))
+                                        path
+                                      (concat "file://" path)))))
              ((string-match "/man/man\\([1-9]\\)/\\(.*\\)\\.[1-9]\\." path)
               (setq help-function 'man
                     help-args (list (concat (match-string 1 path) " "
