@@ -119,16 +119,22 @@ With prefix, also include full text search results."
                               (current-word))
                       nil 'docsetutil-search-history (current-word))
          current-prefix-arg))
-  (help-setup-xref (list #'docsetutil-search term full-text)
-                   (called-interactively-p 'interactive))
-  (with-help-window (help-buffer)
-    (call-process docsetutil-program nil standard-output nil
-                  "search" "-skip-text" "-verbose" "-query" term docsetutil-docset-path)
-    (when full-text
-      (princ "Full text search results:\n")
-      (call-process docsetutil-program nil standard-output nil
-                    "search" "-skip-api" "-query" term docsetutil-docset-path)))
-  (docsetutil-highlight-search-results (help-buffer)))
+  (let ((api (with-output-to-string
+               (call-process docsetutil-program nil standard-output nil
+                             "search" "-skip-text" "-verbose" "-query"
+                             term docsetutil-docset-path))))
+    (if (and (not full-text)
+             (string-match "^Found total of 0 API matches in.*$" api))
+        (message "%s" (match-string 0 api))
+      (help-setup-xref (list #'docsetutil-search term full-text)
+                       (called-interactively-p 'interactive))
+      (with-help-window (help-buffer)
+        (princ api)
+        (when full-text
+          (princ "Full text search results:\n")
+          (call-process docsetutil-program nil standard-output nil
+                        "search" "-skip-api" "-query" term docsetutil-docset-path)))
+      (docsetutil-highlight-search-results (help-buffer)))))
 
 (provide 'docsetutil)
 ;;; docsetutil.el ends here
