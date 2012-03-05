@@ -1,6 +1,6 @@
 ;;; docsetutil.el --- Emacs Interface to `docsetutil'
 
-;; Copyright (C) 2011  Leo Liu
+;; Copyright (C) 2011, 2012  Leo Liu
 
 ;; Author: Leo Liu <sdl.web@gmail.com>
 ;; Keywords: c, processes, tools, docs
@@ -18,25 +18,61 @@
 ;; You should have received a copy of the GNU General Public License
 ;; along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-;;; Commentary:
-
-;;; TODO:
-;;; - insert the API doc directly in the output buffer but display
-;;;   full-text links at the end (no good html renderer for emacs)
-
 ;;; References:
 ;;;  - Use xref system from the help facility - check out help-mode.el
 
 ;;; Code:
 
+(eval-when-compile (require 'cl))
 (require 'url-parse)
 
 (defvar docsetutil-program "/Developer/usr/bin/docsetutil")
 (defvar docsetutil-docset-path "/Developer/Documentation/DocSets/com.apple.adc.documentation.AppleSnowLeopard.CoreReference.docset")
 (defvar docsetutil-browse-url-function 'browse-url)
-(defvar docsetutil-search-history nil)
+(defvar docsetutil-docset-search-paths
+  ;; See: http://goo.gl/jiYPv
+  '("/Applications/Xcode.app/Contents/Developer/Documentation/DocSets"
+    "/Developer/Documentation/DocSets"
+    "~/Library/Developer/Shared/Documentation/DocSets"
+    "/Library/Developer/Shared/Documentation/DocSets"
+    "/Network/Library/Developer/Shared/Documentation/DocSets"
+    "/System/Library/Developer/Shared/Documentation/DocSets")
 
+  "A list of directories where XCode search for docsets.")
+
+(defvar docsetutil-search-history nil)
 (defconst docsetutil-api-regexp "^ \\(.*?\\)   \\(.*?\\) -- \\(.*\\)$")
+
+(defun docsetutil-all-docsets ()
+  "Return all docsets in `docsetutil-docset-search-paths'."
+  (loop for p in docsetutil-docset-search-paths
+        when (file-directory-p p)
+        append
+        ;; Match non "." ".." names
+        (loop for dir in (directory-files p t "^\\(?:[^.]\\|\\.[^.]\\)")
+              when (file-directory-p dir)
+              collect dir)))
+
+;;;###autoload
+(defun docsetutil-choose-docset (docset)
+  "Choose a DOCSET from all found by `docsetutil-all-docsets'."
+  (interactive
+   (save-window-excursion
+     (let ((docsets (docsetutil-all-docsets))
+           (split-width-threshold nil)
+           (buf " *docsets*")
+           number)
+       (with-output-to-temp-buffer buf
+         (loop for docset in docsets
+               for i from 1
+               do (princ (format "%-2d => %s\n" i docset))))
+       (fit-window-to-buffer (get-buffer-window buf))
+       (setq number (read-number "Choose a docset: " 1))
+       (list (nth (1- number) docsets)))))
+  (when docset
+    (setq docsetutil-docset-path docset)
+    (when (called-interactively-p 'interactive)
+      (message "Docset: %s" docset))))
 
 (defun docsetutil-wash-html-tags (&optional buffer)
   (or buffer (setq buffer (current-buffer)))
@@ -76,6 +112,8 @@ The default value for BUFFER is current buffer."
                     help-args (list (if (url-type (url-generic-parse-url path))
                                         path
                                       (concat "file://" path)))))
+             ;; xcode 3.x: /usr/share/man/man2/open.2.gz
+             ;; xcode 4.x: documentation/Darwin/Reference/ManPages/man2/open.2.html#//apple_ref/c/func/open
              ((string-match "/man/man\\([1-9]\\)/\\(.*\\)\\.[1-9]\\." path)
               (setq help-function 'man
                     help-args (list (concat (match-string 1 path) " "

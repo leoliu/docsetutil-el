@@ -1,1 +1,13 @@
 #+title: Emacs Interface to `docsetutil' on OSX
+
+* TODOs [3/5]
+*** DONE Insert the API doc directly in the output buffer but display
+    CLOSED: [2012-03-05 Mon 20:27]
+    full-text links at the end (no good html renderer for emacs)
+*** DONE Do not pop up a window when search return 0 results
+    CLOSED: [2012-03-05 Mon 19:41]
+*** DONE Ease choosing a docset
+    CLOSED: [2012-03-06 Tue 02:51]
+    docset paths: http://goo.gl/jiYPv
+*** TODO Different faces for internal (emacs) and external links (browser)
+*** TODO Support html rendering using shr (emacs-24)
