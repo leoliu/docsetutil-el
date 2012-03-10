@@ -63,6 +63,23 @@ or
 (defvar docsetutil-search-history nil)
 (defconst docsetutil-api-regexp "^ \\(.*?\\)   \\(.*?\\) -- \\(.*\\)$")
 
+;; Note: 1. use /usr/libexec/PlistBuddy or /usr/bin/plutil to convert
+;; plist to xml1 format; 2. Emacs comes with a few xml parsers:
+;; xml-parse-region and libxml-parse-xml-region but used regexp for
+;; simplicity.
+(defun docsetutil-get-docset-name (docset)
+  "Get BundleName from DOCSET's Info.plist file if present."
+  (let ((infofile (expand-file-name "Contents/Info.plist" docset)))
+    (when (file-readable-p infofile)
+      (with-temp-buffer
+        (insert-file-contents infofile)
+        (when (and (not (looking-at-p "^bplist")) ; binary plist
+                   (search-forward "<key>CFBundleName</key>" nil t))
+          (forward-line 1)
+          (when (re-search-forward "<string>\\([^<]+\\)</string>"
+                                   (line-end-position) t)
+            (match-string 1)))))))
+
 ;;;###autoload
 (defun docsetutil-choose-docset (docset)
   "Choose a DOCSET from all found by `docsetutil-all-docsets'."
@@ -71,13 +88,27 @@ or
      (let ((docsets (docsetutil-all-docsets))
            (split-width-threshold nil)
            (buf " *docsets*")
-           number)
+           number default)
        (with-output-to-temp-buffer buf
          (loop for docset in docsets
                for i from 1
-               do (princ (format "%-2d => %s\n" i docset))))
+               for name = (or (docsetutil-get-docset-name docset)
+                              (file-name-nondirectory docset))
+               do
+               (princ (format "%-2d => %s" i name))
+               (when (equal docsetutil-docset-path docset)
+                 (setq default i)
+                 (princ " (current)"))
+               (princ "\n")))
+       (with-current-buffer buf
+         (setq truncate-lines t)
+         (when default
+           (forward-line (1- default)))
+         (let ((inhibit-read-only t))
+           (put-text-property (line-beginning-position) (line-end-position)
+                              'face 'bold-italic)))
        (fit-window-to-buffer (get-buffer-window buf))
-       (setq number (read-number "Choose a docset: " 1))
+       (setq number (read-number "Choose a docset: " default))
        (list (nth (1- number) docsets)))))
   (when docset
     (setq docsetutil-docset-path docset)
