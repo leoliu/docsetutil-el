@@ -26,9 +26,6 @@
 (eval-when-compile (require 'cl))
 (require 'url-parse)
 
-(defvar docsetutil-program "/Developer/usr/bin/docsetutil")
-(defvar docsetutil-docset-path "/Developer/Documentation/DocSets/com.apple.adc.documentation.AppleSnowLeopard.CoreReference.docset")
-(defvar docsetutil-browse-url-function 'browse-url)
 (defvar docsetutil-docset-search-paths
   ;; See: http://goo.gl/jiYPv
   '("/Applications/Xcode.app/Contents/Developer/Documentation/DocSets"
@@ -40,8 +37,13 @@
 
   "A list of directories where XCode search for docsets.")
 
-(defvar docsetutil-search-history nil)
-(defconst docsetutil-api-regexp "^ \\(.*?\\)   \\(.*?\\) -- \\(.*\\)$")
+(defvar docsetutil-program "docsetutil"
+  "Executable for docsetutil.
+
+Normally it resides in one of the following directories:
+  /Applications/Xcode.app/Contents/Developer/usr/bin/
+or
+  /Developer/usr/bin/")
 
 (defun docsetutil-all-docsets ()
   "Return all docsets in `docsetutil-docset-search-paths'."
@@ -52,6 +54,14 @@
         (loop for dir in (directory-files p t "^\\(?:[^.]\\|\\.[^.]\\)")
               when (file-directory-p dir)
               collect dir)))
+
+(defvar docsetutil-docset-path (car (last (docsetutil-all-docsets)))
+  "The docset to use by `docsetutil-search'.")
+
+(defvar docsetutil-browse-url-function 'browse-url)
+
+(defvar docsetutil-search-history nil)
+(defconst docsetutil-api-regexp "^ \\(.*?\\)   \\(.*?\\) -- \\(.*\\)$")
 
 ;;;###autoload
 (defun docsetutil-choose-docset (docset)
