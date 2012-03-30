@@ -198,11 +198,17 @@ With prefix, also include full text search results."
                               (current-word))
                       nil 'docsetutil-search-history (current-word))
          current-prefix-arg))
+  ;; Strip leading and trailing blank chars
+  (when (string-match "^[ \t\n]*\\(.*?\\)[ \t\n]*$" term)
+    (setq term (match-string 1 term)))
+  ;; For API search, space is used to separate terms i.e. 'nsstring
+  ;; nsnumber' returns results for both NSString and NSNumber.
   (let ((api (with-output-to-string
                (call-process docsetutil-program nil standard-output nil
                              "search" "-skip-text" "-verbose" "-query"
                              term docsetutil-docset-path))))
     (if (and (not full-text)
+             (not (string-match-p "[ \t]+" term))
              (string-match "^Found total of 0 API matches in.*$" api))
         (message "%s" (match-string 0 api))
       (help-setup-xref (list #'docsetutil-search term full-text)
