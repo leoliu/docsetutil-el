@@ -118,18 +118,27 @@ or
 (defun docsetutil-wash-html-tags (&optional buffer)
   (or buffer (setq buffer (current-buffer)))
   (with-current-buffer buffer
-    (let (keyword)
-      (while (re-search-forward "<\\([^> ]+\\).*?>\\(\\(?:.\\|\n\\)*?\\)</\\1>" nil t)
-        (setq keyword (match-string 2))
+    (let (keyword href)
+      (while (re-search-forward "<\\([^> ]+\\)[ \t\n]*\\(.*?\\)>\\(\\(?:.\\|\n\\)*?\\)</\\1>" nil t)
+        (setq keyword (match-string 3))
         (if (equal (match-string 1) "a")
             (progn
+              (when (string-match-p "[ \t\n]+" keyword)
+                (setq href (match-string 2)))
               (replace-match "")
+              (when (and href (string-match "href=\"\\([^\"]+\\)\"" href))
+                (setq href (concat "file://"
+                                   (expand-file-name "Contents/Resources/Documents/"
+                                                     docsetutil-docset-path)
+                                   (match-string 1 href))))
               (insert-text-button keyword
-                                  'help-function #'docsetutil-search
-                                  'help-args (list keyword)
+                                  'help-function (if href
+                                                     docsetutil-browse-url-function
+                                                   #'docsetutil-search)
+                                  'help-args (list (or href keyword))
                                   'face 'link
                                   :type 'help-xref))
-          (replace-match keyword))
+          (replace-match keyword nil t))
         (goto-char (match-beginning 0))))))
 
 (defun docsetutil-highlight-search-results (&optional buffer)
