@@ -45,6 +45,12 @@ Normally it resides in one of the following directories:
 or
   /Developer/usr/bin/")
 
+(defvar docsetutil-use-text-tree t
+  "When set, the text search results are presented using a new
+hierarchical/tree format wherein individual page and section
+search results are coallesced together under the node that holds
+those search results.")
+
 (defun docsetutil-all-docsets ()
   "Return all docsets in `docsetutil-docset-search-paths'."
   (loop for p in docsetutil-docset-search-paths
@@ -177,7 +183,7 @@ The default value for BUFFER is current buffer."
            'help-args help-args
            :type 'help-xref))
         ;; process full text results
-        (while (re-search-forward "^ [0-9.]+ \\(.*\\)$" nil t)
+        (while (re-search-forward "^[ \t]+[0-9.]+ \\(.*\\)$" nil t)
           (setq path (match-string-no-properties 1))
           (setq help-function docsetutil-browse-url-function)
           (if (save-match-data (url-type (url-generic-parse-url path)))
@@ -226,8 +232,9 @@ With prefix, also include full text search results."
         (princ api)
         (when full-text
           (princ "Full text search results:\n")
-          (call-process docsetutil-program nil standard-output nil
-                        "search" "-skip-api" "-query" term docsetutil-docset-path)))
+          (apply #'call-process docsetutil-program nil standard-output nil
+                 `("search" ,@(and docsetutil-use-text-tree '("-text-tree"))
+                   "-skip-api" "-query" ,term ,docsetutil-docset-path))))
       (docsetutil-highlight-search-results (help-buffer)))))
 
 (provide 'docsetutil)
