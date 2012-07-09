@@ -45,6 +45,8 @@ Normally it resides in one of the following directories:
 or
   /Developer/usr/bin/")
 
+(defvar docsetutil-fill-column 75)
+
 (defvar docsetutil-use-text-tree t
   "When set, the text search results are presented using a new
 hierarchical/tree format wherein individual page and section
@@ -181,7 +183,26 @@ The default value for BUFFER is current buffer."
            'help-echo path
            'help-function help-function
            'help-args help-args
-           :type 'help-xref))
+           :type 'help-xref)
+          (let ((limit (save-excursion
+                         (and (re-search-forward "^$" nil t)
+                              (point-marker))))
+                (field-re "^[ \t]*\\([[:upper:]][[:word:][:blank:]]+:\\) "))
+            (while (re-search-forward field-re limit t)
+              (put-text-property (match-beginning 1) (match-end 1) 'face 'bold)
+              (when (equal (match-string 1) "Abstract:")
+                (let ((fp fill-prefix)
+                      (fc fill-column))
+                  (setq fill-prefix (make-string (- (current-column) 6) ?\s)
+                        fill-column docsetutil-fill-column)
+                  (unwind-protect
+                      (fill-region-as-paragraph (point)
+                                                (if (re-search-forward field-re limit t)
+                                                    (match-beginning 0)
+                                                  (point-max)))
+                    (setq fill-prefix fp
+                          fill-column fc)))))
+            (set-marker limit nil)))
         ;; process full text results
         (while (re-search-forward "^[ \t]+[0-9.]+ \\(.*\\)$" nil t)
           (setq path (match-string-no-properties 1))
