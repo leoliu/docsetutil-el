@@ -235,7 +235,10 @@ With prefix, also include full text search results."
           (apply #'call-process docsetutil-program nil standard-output nil
                  `("search" ,@(and docsetutil-use-text-tree '("-text-tree"))
                    "-skip-api" "-query" ,term ,docsetutil-docset-path))))
-      (docsetutil-highlight-search-results (help-buffer)))))
+      (docsetutil-highlight-search-results (help-buffer))
+      (let ((help-window (get-buffer-window (help-buffer))))
+        (when help-window
+          (fit-window-to-buffer help-window (floor (frame-height) 2)))))))
 
 (provide 'docsetutil)
 ;;; docsetutil.el ends here
