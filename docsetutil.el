@@ -53,6 +53,47 @@ hierarchical/tree format wherein individual page and section
 search results are coallesced together under the node that holds
 those search results.")
 
+(defvar docsetutil-docset-path (car (last (docsetutil-all-docsets)))
+  "The docset to use by `docsetutil-search'.")
+
+(defvar docsetutil-objc-completions nil)
+
+(defvar docsetutil-browse-url-function 'browse-url)
+
+(defvar docsetutil-search-history nil)
+(defconst docsetutil-api-regexp "^ \\(.*?\\)   \\(.*?\\) -- \\(.*\\)$")
+
+(defun docsetutil-completions (query &optional path)
+  "Return a collection of names in the output of QUERY to a docset.
+PATH is the path to the docset and defaults to
+`docsetutil-docset-path'."
+  (assert (or path docsetutil-docset-path) nil "No docset path specfied.")
+  (let ((path (or path docsetutil-docset-path))
+        (res (make-vector 17 0)))
+    (with-temp-buffer
+      (assert (zerop (call-process docsetutil-program nil t nil
+                                   "search" "-skip-text" "-query" query
+                                   path))
+              nil "Process %s failed with non-zero exit code"
+              docsetutil-program)
+      (goto-char (point-min))
+      (while (re-search-forward
+              "^[ \t]*[^/]+/[^/]+/[^/]+/\\([^ \t\r\n]+\\)" nil t)
+        (intern (match-string 1) res)))
+    res))
+
+;; Benchmark on an iMac 2.7 GHz Intel Core i5
+;;  - iOS 5.1 Libarary: 2.56 seconds
+;;  - OS X 10.7 Core Library: 7.35 seconds (5.3 seconds for C/*/*/*)
+(defun docsetutil-objc-completions ()
+  "Return completions for C and Objective-C."
+  (or docsetutil-objc-completions
+      (progn
+        (message "Prepare docset completions...")
+        (setq docsetutil-objc-completions
+              (vconcat (docsetutil-completions "C/*/*/*")
+                       (docsetutil-completions "Objective-C/*/*/*"))))))
+
 (defun docsetutil-all-docsets ()
   "Return all docsets in `docsetutil-docset-search-paths'."
   (loop for p in docsetutil-docset-search-paths
@@ -62,14 +103,6 @@ those search results.")
         (loop for dir in (directory-files p t "^\\(?:[^.]\\|\\.[^.]\\)")
               when (file-directory-p dir)
               collect dir)))
-
-(defvar docsetutil-docset-path (car (last (docsetutil-all-docsets)))
-  "The docset to use by `docsetutil-search'.")
-
-(defvar docsetutil-browse-url-function 'browse-url)
-
-(defvar docsetutil-search-history nil)
-(defconst docsetutil-api-regexp "^ \\(.*?\\)   \\(.*?\\) -- \\(.*\\)$")
 
 ;; Note: 1. use /usr/libexec/PlistBuddy or /usr/bin/plutil to convert
 ;; plist to xml1 format; 2. Emacs comes with a few xml parsers:
@@ -119,7 +152,8 @@ those search results.")
        (setq number (read-number "Choose a docset: " default))
        (list (nth (1- number) docsets)))))
   (when docset
-    (setq docsetutil-docset-path docset)
+    (setq docsetutil-docset-path docset
+          docsetutil-objc-completions nil)
     (when (called-interactively-p 'interactive)
       (message "Docset: %s" docset))))
 
@@ -229,10 +263,12 @@ The default value for BUFFER is current buffer."
   "Use `docsetutil' to search documentation on TERM.
 With prefix, also include full text search results."
   (interactive
-   (list (read-string (format "Apple docset %s search (default %s): "
-                              (if current-prefix-arg "full text" "API")
-                              (current-word))
-                      nil 'docsetutil-search-history (current-word))
+   (list (completing-read
+          (format "Apple docset %s search (default: %s): "
+                  (if current-prefix-arg "full text" "API")
+                  (current-word))
+          (docsetutil-objc-completions)
+          nil nil nil 'docsetutil-search-history (current-word))
          current-prefix-arg))
   ;; Strip leading and trailing blank chars
   (when (string-match "^[ \t\n]*\\(.*?\\)[ \t\n]*$" term)
