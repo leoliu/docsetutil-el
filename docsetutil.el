@@ -92,6 +92,8 @@ results."
               when (file-directory-p dir)
               collect dir)))
 
+;;; Completion
+
 (defun docsetutil-completions (query &optional path)
   "Return a collection of names in the output of QUERY to a docset.
 PATH is the path to the docset and defaults to
@@ -122,6 +124,32 @@ PATH is the path to the docset and defaults to
         (setq docsetutil-objc-completions
               (vconcat (docsetutil-completions "C/*/*/*")
                        (docsetutil-completions "Objective-C/*/*/*"))))))
+
+(eval-when-compile (require 'hippie-exp))
+
+;;;###autoload
+(defun try-docsetutil-objc-completions (old)
+  "A function suitable for `hippie-expand-try-functions-list'."
+  (require 'hippie-exp)
+  (unless old
+    (he-init-string (save-excursion
+                      (skip-syntax-backward "w_")
+                      (point))
+                    (point))
+    (setq he-expand-list
+          (and (not (equal he-search-string ""))
+               (sort (all-completions he-search-string
+                                      (docsetutil-objc-completions))
+                     'string-lessp))))
+  (if (null he-expand-list)
+      (progn
+        (if old (he-reset-string))
+        nil)
+    (he-substitute-string (car he-expand-list))
+    (setq he-expand-list (cdr he-expand-list))
+    t))
+
+;;; UI for selecting a docset
 
 (defun docsetutil-insert-plist-contents (file)
   (save-restriction
@@ -210,6 +238,8 @@ are strings."
           docsetutil-objc-completions nil)
     (when (called-interactively-p 'interactive)
       (message "Docset: %s" docset))))
+
+;;; Docset Query
 
 (defun docsetutil-wash-html-tags (&optional buffer)
   (or buffer (setq buffer (current-buffer)))
