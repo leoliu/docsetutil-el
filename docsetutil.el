@@ -26,8 +26,44 @@
 (eval-when-compile (require 'cl))
 (require 'url-parse)
 
+(defgroup docsetutil nil
+  "Group for docsetutil."
+  :prefix "docsetutil-"
+  :group 'tools)
+
+(defcustom docsetutil-program "docsetutil"
+  "Executable for docsetutil.
+
+Normally it resides in one of the following directories:
+  
+  1. /Applications/Xcode.app/Contents/Developer/usr/bin/
+     (xcode 4.2 and above)
+  2. /Developer/usr/bin/ (xcode 3.x)"
+  :type 'file
+  :group 'docsetutil)
+
+(defcustom docsetutil-fill-column 75
+  "Fill column used for formatting docset search results."
+  :type 'integer
+  :group 'docsetutil)
+
+(defcustom docsetutil-use-text-tree t
+  "Use hierarchical/tree format to display full text search results.
+When set, individual page and section search results are
+coallesced together under the node that holds those search
+results."
+  :type 'boolean
+  :group 'docsetutil)
+
+(defcustom docsetutil-browse-url-function 'browse-url
+  "Function used to browse url in search outputs."
+  :type 'function
+  :group 'docsetutil)
+
+;;;; END OF DEFCUSTOMS
+
+;; See: http://goo.gl/jiYPv
 (defvar docsetutil-docset-search-paths
-  ;; See: http://goo.gl/jiYPv
   '("/Applications/Xcode.app/Contents/Developer/Documentation/DocSets"
     "/Developer/Documentation/DocSets"
     "~/Library/Developer/Shared/Documentation/DocSets"
@@ -37,31 +73,24 @@
 
   "A list of directories where XCode search for docsets.")
 
-(defvar docsetutil-program "docsetutil"
-  "Executable for docsetutil.
-
-Normally it resides in one of the following directories:
-  /Applications/Xcode.app/Contents/Developer/usr/bin/
-or
-  /Developer/usr/bin/")
-
-(defvar docsetutil-fill-column 75)
-
-(defvar docsetutil-use-text-tree t
-  "When set, the text search results are presented using a new
-hierarchical/tree format wherein individual page and section
-search results are coallesced together under the node that holds
-those search results.")
-
 (defvar docsetutil-docset-path (car (last (docsetutil-all-docsets)))
   "The docset to use by `docsetutil-search'.")
 
 (defvar docsetutil-objc-completions nil)
 
-(defvar docsetutil-browse-url-function 'browse-url)
-
 (defvar docsetutil-search-history nil)
+
 (defconst docsetutil-api-regexp "^ \\(.*?\\)   \\(.*?\\) -- \\(.*\\)$")
+
+(defun docsetutil-all-docsets ()
+  "Return all docsets in `docsetutil-docset-search-paths'."
+  (loop for p in docsetutil-docset-search-paths
+        when (file-directory-p p)
+        append
+        ;; Match non "." ".." names
+        (loop for dir in (directory-files p t "^\\(?:[^.]\\|\\.[^.]\\)")
+              when (file-directory-p dir)
+              collect dir)))
 
 (defun docsetutil-completions (query &optional path)
   "Return a collection of names in the output of QUERY to a docset.
@@ -94,20 +123,8 @@ PATH is the path to the docset and defaults to
               (vconcat (docsetutil-completions "C/*/*/*")
                        (docsetutil-completions "Objective-C/*/*/*"))))))
 
-(defun docsetutil-all-docsets ()
-  "Return all docsets in `docsetutil-docset-search-paths'."
-  (loop for p in docsetutil-docset-search-paths
-        when (file-directory-p p)
-        append
-        ;; Match non "." ".." names
-        (loop for dir in (directory-files p t "^\\(?:[^.]\\|\\.[^.]\\)")
-              when (file-directory-p dir)
-              collect dir)))
-
-;; Note: 1. use /usr/libexec/PlistBuddy or /usr/bin/plutil to convert
-;; plist to xml1 format; 2. Emacs comes with a few xml parsers:
-;; xml-parse-region and libxml-parse-xml-region but used regexp for
-;; simplicity.
+;; Tool /usr/libexec/PlistBuddy or /usr/bin/plutil can convert plist
+;; to xml1 format.
 (defun docsetutil-get-docset-name (docset)
   "Get BundleName from DOCSET's Info.plist file if present."
   (let ((infofile (expand-file-name "Contents/Info.plist" docset)))
