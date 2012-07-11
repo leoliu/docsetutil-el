@@ -73,7 +73,7 @@ results."
 
   "A list of directories where XCode search for docsets.")
 
-(defvar docsetutil-docset-path (car (last (docsetutil-all-docsets)))
+(defvar docsetutil-docset-path nil
   "The docset to use by `docsetutil-search'.")
 
 (defvar docsetutil-objc-completions nil)
@@ -82,23 +82,13 @@ results."
 
 (defconst docsetutil-api-regexp "^ \\(.*?\\)   \\(.*?\\) -- \\(.*\\)$")
 
-(defun docsetutil-all-docsets ()
-  "Return all docsets in `docsetutil-docset-search-paths'."
-  (loop for p in docsetutil-docset-search-paths
-        when (file-directory-p p)
-        append
-        ;; Match non "." ".." names
-        (loop for dir in (directory-files p t "^\\(?:[^.]\\|\\.[^.]\\)")
-              when (file-directory-p dir)
-              collect dir)))
-
 ;;; Completion
 
 (defun docsetutil-completions (query &optional path)
   "Return a collection of names in the output of QUERY to a docset.
 PATH is the path to the docset and defaults to
 `docsetutil-docset-path'."
-  (assert (or path docsetutil-docset-path) nil "No docset path specfied.")
+  (assert (or path docsetutil-docset-path) nil "No docset path specfied")
   (let ((path (or path docsetutil-docset-path))
         (res (make-vector 17 0)))
     (with-temp-buffer
@@ -202,24 +192,37 @@ are strings."
         (docsetutil-insert-plist-contents infofile)
         (docsetutil-parse-plist-region (point-min) (point-max)))))))
 
+(defun docsetutil-find-all-docsets (&optional paths)
+  "Find all docsets in PATHS.
+Each item in the return value has the form:
+  (Fullpath CFBundleIdentifier CFBundleName Info)."
+  (apply 'append
+         (mapcar (lambda (path)
+                   (mapcar (lambda (d)
+                             (let* ((info (docsetutil-parse-docset-info d))
+                                    (id (cdr (assoc "CFBundleIdentifier" info)))
+                                    (name (cdr (assoc "CFBundleName" info))))
+                               (list* d id name info)))
+                           (directory-files path t "\\.docset\\'")))
+                 (loop for p in (or paths docsetutil-docset-search-paths)
+                       when (file-directory-p p) collect p))))
+
 ;;;###autoload
 (defun docsetutil-choose-docset (docset)
-  "Choose a DOCSET from all found by `docsetutil-all-docsets'."
+  "Choose a DOCSET from the list by `docsetutil-find-all-docsets'."
   (interactive
    (save-window-excursion
-     (let ((docsets (docsetutil-all-docsets))
+     (let ((docsets (docsetutil-find-all-docsets))
            (split-width-threshold nil)
            (buf " *docsets*")
            number default)
        (with-output-to-temp-buffer buf
-         (loop for docset in docsets
+         (loop for (path id bn . info) in docsets
                for i from 1
-               for name = (or (cdr (assoc "CFBundleName"
-                                          (docsetutil-parse-docset-info docset)))
-                              (file-name-nondirectory docset))
                do
-               (princ (format "%-2d => %s" i name))
-               (when (equal docsetutil-docset-path docset)
+               (princ (format "%-2d => %s" i
+                              (or bn (file-name-nondirectory path))))
+               (when (equal docsetutil-docset-path path)
                  (setq default i)
                  (princ " (current)"))
                (princ "\n")))
@@ -232,12 +235,12 @@ are strings."
                               'face 'bold-italic)))
        (fit-window-to-buffer (get-buffer-window buf))
        (setq number (read-number "Choose a docset: " default))
-       (list (nth (1- number) docsets)))))
-  (when docset
+       (list (car (nth (1- number) docsets))))))
+  (if (not docset)
+      (message "No docset specified")
     (setq docsetutil-docset-path docset
           docsetutil-objc-completions nil)
-    (when (called-interactively-p 'interactive)
-      (message "Docset: %s" docset))))
+    (message "Docset: %s" docset)))
 
 ;;; Docset Query
 
@@ -380,6 +383,9 @@ With prefix, also include full text search results."
       (let ((help-window (get-buffer-window (help-buffer))))
         (when help-window
           (fit-window-to-buffer help-window (floor (frame-height) 2)))))))
+
+(or docsetutil-docset-path
+    (setq docsetutil-docset-path (caar (last (docsetutil-find-all-docsets)))))
 
 (provide 'docsetutil)
 ;;; docsetutil.el ends here
