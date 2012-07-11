@@ -123,20 +123,56 @@ PATH is the path to the docset and defaults to
               (vconcat (docsetutil-completions "C/*/*/*")
                        (docsetutil-completions "Objective-C/*/*/*"))))))
 
-;; Tool /usr/libexec/PlistBuddy or /usr/bin/plutil can convert plist
-;; to xml1 format.
-(defun docsetutil-get-docset-name (docset)
-  "Get BundleName from DOCSET's Info.plist file if present."
-  (let ((infofile (expand-file-name "Contents/Info.plist" docset)))
-    (when (file-readable-p infofile)
+(defun docsetutil-insert-plist-contents (file)
+  (save-restriction
+    (narrow-to-region (point) (point))
+    (insert-file-contents file)
+    (when (looking-at-p "^bplist00")
+      ;; /usr/libexec/PlistBuddy or /usr/bin/plutil can convert bplist
+      ;; to xml1 format.
+      (or (executable-find "plutil")
+          (error "Can not process binary plist file"))
+      (assert (zerop (shell-command-on-region
+                      (point-min) (point-max)
+                      "plutil -convert xml1 -o - -" nil t))
+              nil "Convert `%s' to xml failed" file))))
+
+(eval-when-compile (require 'xml))      ; pacify compiler warnings
+(defun docsetutil-parse-plist-region (beg end)
+  "Parse a plist region and return an alist for the key-value pairs."
+  (let ((children
+         (if (fboundp 'libxml-parse-xml-region)
+             (cddr (caddr (libxml-parse-xml-region beg end)))
+           (require 'xml)
+           (let ((rm-if (lambda (pred seq)
+                          (delq nil (mapcar (lambda (x)
+                                              (and (not (funcall pred x)) x))
+                                            seq)))))
+             (funcall rm-if 'stringp
+                      (xml-node-children
+                       (car (funcall rm-if 'stringp
+                                     (xml-node-children
+                                      (car (xml-parse-region beg end)))))))))))
+    (loop for (x y) on children by 'cddr
+          collect (cons (third x) (third y)))))
+
+(defun docsetutil-parse-docset-info (docset &optional error)
+  "Parse Info.plist file of a docset if present.
+DOCSET is the path to a docset and defaults to
+`docsetutil-docset-path'. If ERROR is non-nil, signal an error
+when Info.plist is missing.
+
+The return value is an alist of (KEY . VALUE) both KEY and VALUE
+are strings."
+  (let* ((docset (or docset docsetutil-docset-path))
+         (infofile (expand-file-name "Contents/Info.plist" docset)))
+    (cond
+     ((and error (not (file-exists-p infofile)))
+      (signal 'file-error (list 'file-exists-p infofile)))
+     ((file-exists-p infofile)
       (with-temp-buffer
-        (insert-file-contents infofile)
-        (when (and (not (looking-at-p "^bplist")) ; binary plist
-                   (search-forward "<key>CFBundleName</key>" nil t))
-          (forward-line 1)
-          (when (re-search-forward "<string>\\([^<]+\\)</string>"
-                                   (line-end-position) t)
-            (match-string 1)))))))
+        (docsetutil-insert-plist-contents infofile)
+        (docsetutil-parse-plist-region (point-min) (point-max)))))))
 
 ;;;###autoload
 (defun docsetutil-choose-docset (docset)
@@ -150,7 +186,8 @@ PATH is the path to the docset and defaults to
        (with-output-to-temp-buffer buf
          (loop for docset in docsets
                for i from 1
-               for name = (or (docsetutil-get-docset-name docset)
+               for name = (or (cdr (assoc "CFBundleName"
+                                          (docsetutil-parse-docset-info docset)))
                               (file-name-nondirectory docset))
                do
                (princ (format "%-2d => %s" i name))
