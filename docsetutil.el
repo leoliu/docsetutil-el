@@ -42,6 +42,11 @@ Normally it resides in one of the following directories:
   :type 'file
   :group 'docsetutil)
 
+(defcustom docsetutil-cache-file (locate-user-emacs-file "docsetutil")
+  "Cache file for docsetutil."
+  :type 'file
+  :group 'docsetutil)
+
 (defcustom docsetutil-fill-column 75
   "Fill column used for formatting docset search results."
   :type 'integer
@@ -56,7 +61,7 @@ results."
   :group 'docsetutil)
 
 (defcustom docsetutil-browse-url-function 'browse-url
-  "Function used to browse url in search outputs."
+  "Function used to browse URL in search outputs."
   :type 'function
   :group 'docsetutil)
 
@@ -76,19 +81,70 @@ results."
 (defvar docsetutil-docset-path nil
   "The docset to use by `docsetutil-search'.")
 
-(defvar docsetutil-objc-completions nil)
-
 (defvar docsetutil-search-history nil)
 
 (defconst docsetutil-api-regexp "^ \\(.*?\\)   \\(.*?\\) -- \\(.*\\)$")
 
 ;;; Completion
 
+;; Each entry: (PATH MTIME OBARRAY)
+(defvar docsetutil-cache nil)
+
+(defun docsetutil-cache-prune (cache)
+  (loop for (path mtime ob) in cache
+        with paths = (mapcar 'car (docsetutil-find-all-docsets))
+        with seen = ()
+        when (and (not (member path seen))
+                  (member path paths))
+        collect (progn (push path seen) (list path mtime ob))))
+
+(defun docsetutil-cache-save (file)
+  (check-type file string)
+  (if docsetutil-cache
+      (with-temp-buffer
+        (prin1 (loop for (path mtime ob) in (docsetutil-cache-prune
+                                             docsetutil-cache)
+                     with syms = ()
+                     do (mapatoms (lambda (s) (push (symbol-name s) syms)) ob)
+                     when syms
+                     collect (list path mtime syms))
+               (current-buffer))
+        (write-region nil nil file nil 0))
+    (message (format-time-string
+              "[%Y-%m-%dT%T%z] (info) docsetutil: no cache to save"))))
+
+(defun docsetutil-cache-load (file)
+  (assert (file-readable-p file))
+  (unless (zerop (nth 7 (file-attributes file)))
+    (let ((cache (with-temp-buffer
+                   (insert-file-contents file)
+                   (condition-case nil
+                       (read (current-buffer))
+                     (error
+                      (error "Failed to load malformed cache file: %s" file))))))
+      (setq docsetutil-cache
+            (loop for (path mtime names) in cache
+                  for ob = (make-vector 37 0)
+                  do (mapc (lambda (n) (intern n ob)) names)
+                  collect (list path mtime ob))))))
+
+(defun docsetutil-cache-reset ()
+  "Clear all cached data."
+  (interactive)
+  (when (and (or docsetutil-cache
+                 (/= 0 (nth 7 (file-attributes docsetutil-cache-file))))
+             (yes-or-no-p "Clear all cached docsetutil data? "))
+    (setq docsetutil-cache nil)
+    (write-region "" nil docsetutil-cache-file nil 0)
+    (message "Docsetutil cache cleared")))
+
 (defun docsetutil-completions (query &optional path)
   "Return a collection of names in the output of QUERY to a docset.
+Mutiple queries can be specified by seperating them with space.
 PATH is the path to the docset and defaults to
 `docsetutil-docset-path'."
-  (assert (or path docsetutil-docset-path) nil "No docset path specfied")
+  (check-type query string "Query must be a string")
+  (assert (or path docsetutil-docset-path) nil "No docset path provided")
   (let ((path (or path docsetutil-docset-path))
         (res (make-vector 17 0)))
     (with-temp-buffer
@@ -104,16 +160,23 @@ PATH is the path to the docset and defaults to
     res))
 
 ;; Benchmark on an iMac 2.7 GHz Intel Core i5
-;;  - iOS 5.1 Libarary: 2.56 seconds
+;;  - iOS 5.1 Library: 2.56 seconds
 ;;  - OS X 10.7 Core Library: 7.35 seconds (5.3 seconds for C/*/*/*)
-(defun docsetutil-objc-completions ()
+(defun docsetutil-objc-completions (&optional docset)
   "Return completions for C and Objective-C."
-  (or docsetutil-objc-completions
-      (progn
-        (message "Prepare docset completions...")
-        (setq docsetutil-objc-completions
-              (vconcat (docsetutil-completions "C/*/*/*")
-                       (docsetutil-completions "Objective-C/*/*/*"))))))
+  (message "Prepare docset completions...")
+  (let* ((docset (or docset docsetutil-docset-path))
+         (cache (assoc docset docsetutil-cache))
+         (mtime (nth 5 (file-attributes docset))))
+    (if (and cache (equal (second cache) mtime))
+        (third cache)
+      (let ((res (docsetutil-completions "C/*/*/* Objective-C/*/*/*" docset)))
+        ;; Cache it unless empty.
+        (when (catch 'exit
+                (mapatoms (lambda (_) (throw 'exit t)) res))
+          (push (list docset mtime res) docsetutil-cache)
+          (docsetutil-cache-save docsetutil-cache-file)
+          res)))))
 
 (eval-when-compile (require 'hippie-exp))
 
@@ -277,8 +340,7 @@ docset to view."
        (list (car (nth (1- number) docsets))))))
   (if (not docset)
       (message "No docset specified")
-    (setq docsetutil-docset-path docset
-          docsetutil-objc-completions nil)
+    (setq docsetutil-docset-path docset)
     (message "Docset: %s" docset)))
 
 ;;; Docset Query
@@ -423,8 +485,13 @@ With prefix, also include full text search results."
         (when help-window
           (fit-window-to-buffer help-window (floor (frame-height) 2)))))))
 
+;;; Finish up
 (or docsetutil-docset-path
     (setq docsetutil-docset-path (caar (last (docsetutil-find-all-docsets)))))
+
+(when (and (not docsetutil-cache)
+           (file-readable-p docsetutil-cache-file))
+  (ignore-errors (docsetutil-cache-load docsetutil-cache-file)))
 
 (provide 'docsetutil)
 ;;; docsetutil.el ends here
