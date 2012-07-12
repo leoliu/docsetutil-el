@@ -207,6 +207,45 @@ Each item in the return value has the form:
                  (loop for p in (or paths docsetutil-docset-search-paths)
                        when (file-directory-p p) collect p))))
 
+(defun docsetutil-view-docset-info (docset &optional all)
+  "View DOCSET information.
+When called interactively with no prefix, view current docset;
+with two prefixes, view all docsets; otherwise ask the user for a
+docset to view."
+  (interactive
+   (list (if (or (not docsetutil-docset-path)
+                 (and current-prefix-arg
+                      (/= (prefix-numeric-value current-prefix-arg) 16)))
+             (completing-read "Docset: " (docsetutil-find-all-docsets))
+           docsetutil-docset-path)
+         (= (prefix-numeric-value current-prefix-arg) 16)))
+  (assert docset nil "No docset provided")
+  (let ((docset (if (stringp docset)
+                    (assoc docset (docsetutil-find-all-docsets))
+                  docset))
+        (fmt-docset
+         (lambda (doc)
+           (with-current-buffer standard-output
+             (insert (propertize (format "[From %s]"
+                                         (file-name-directory (car doc)))
+                                 'face 'font-lock-comment-face) "\n\n")
+             (insert (propertize (file-name-nondirectory (car doc))
+                                 'face 'bold-italic) ":\n\n")
+             (when (cdddr doc)
+               (loop for (k . v) in (cdddr doc)
+                     with fmt = (format "%%%ds: "
+                                        (apply 'max
+                                               (mapcar (lambda (x)
+                                                         (length (car x)))
+                                                       (cdddr doc))))
+                     do
+                     (insert (propertize (format fmt k) 'face 'bold))
+                     (insert (or v "(none)") "\n")))
+             (insert (make-string 75 ?-) "\n\n")))))
+    (with-output-to-temp-buffer "*DocsetInfo*"
+      (if all (mapc fmt-docset (docsetutil-find-all-docsets))
+        (funcall fmt-docset docset)))))
+
 ;;;###autoload
 (defun docsetutil-choose-docset (docset)
   "Choose a DOCSET from the list by `docsetutil-find-all-docsets'."
