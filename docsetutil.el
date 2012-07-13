@@ -345,6 +345,46 @@ docset to view."
 
 ;;; Docset Query
 
+;; Copied from html2text-replace-list
+(defvar docsetutil-html-entity-list
+  '(("&acute;" . "`")
+    ("&amp;" . "&")
+    ("&apos;" . "'")
+    ("&brvbar;" . "|")
+    ("&cent;" . "c")
+    ("&circ;" . "^")
+    ("&copy;" . "(C)")
+    ("&curren;" . "(#)")
+    ("&deg;" . "degree")
+    ("&divide;" . "/")
+    ("&euro;" . "e")
+    ("&frac12;" . "1/2")
+    ("&gt;" . ">")
+    ("&iquest;" . "?")
+    ("&laquo;" . "<<")
+    ("&ldquo" . "\"")
+    ("&lsaquo;" . "(")
+    ("&lsquo;" . "`")
+    ("&lt;" . "<")
+    ("&mdash;" . "--")
+    ("&nbsp;" . " ")
+    ("&ndash;" . "-")
+    ("&permil;" . "%%")
+    ("&plusmn;" . "+-")
+    ("&pound;" . "£")
+    ("&quot;" . "\"")
+    ("&raquo;" . ">>")
+    ("&rdquo" . "\"")
+    ("&reg;" . "(R)")
+    ("&rsaquo;" . ")")
+    ("&rsquo;" . "'")
+    ("&sect;" . "§")
+    ("&sup1;" . "^1")
+    ("&sup2;" . "^2")
+    ("&sup3;" . "^3")
+    ("&tilde;" . "~"))
+  "The map of entity to text.")
+
 (defun docsetutil-wash-html-tags (&optional buffer)
   (or buffer (setq buffer (current-buffer)))
   (with-current-buffer buffer
@@ -371,7 +411,12 @@ docset to view."
                                   'face (if href 'link 'font-lock-keyword-face)
                                   :type 'help-xref))
           (replace-match keyword nil t))
-        (goto-char (match-beginning 0))))))
+        (goto-char (match-beginning 0))))
+    (goto-char (point-min))
+    (let ((re (regexp-opt (mapcar 'car docsetutil-html-entity-list))))
+      (while (re-search-forward re nil t)
+        (replace-match
+         (cdr (assoc (match-string 0) docsetutil-html-entity-list)))))))
 
 (defun docsetutil-highlight-search-results (&optional buffer)
   "Highlight docsetutil search results in BUFFER.
