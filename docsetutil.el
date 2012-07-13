@@ -481,7 +481,10 @@ The default value for BUFFER is current buffer."
             (setq path (concat (expand-file-name "Contents/Resources/Documents/"
                                                  docsetutil-docset-path)
                                path))
-            (setq missing (not (file-exists-p path)))
+            (when (setq missing (not (file-exists-p path)))
+              (save-match-data
+                (and (string-match "\\(.*\\)#" path)
+                     (setq missing (not (file-exists-p (match-string 1 path)))))))
             (setq help-args (list (concat "file://" path))))
           (if missing
               (put-text-property (match-beginning 1) (match-end 1)
