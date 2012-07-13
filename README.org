@@ -1,8 +1,9 @@
 #+title: Emacs Interface to `docsetutil' on OSX
 
-* TODOs [5/7]
-*** TODO Different faces for internal (emacs) and external links (browser)
+* TODOs [6/7]
 *** TODO Support html rendering using shr (emacs-24)
+*** DONE Different faces for internal (emacs) and external links (browser)
+    CLOSED: [2012-07-13 Fri 14:34]
 *** DONE Fails on UI_USER_INTERFACE_IDIOM
     CLOSED: [2012-03-31 Sat 01:22]
 *** DONE docsetutil-wash-html-tags fails on (docsetutil-search "LSGetApplicationForURL")

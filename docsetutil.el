@@ -351,8 +351,10 @@ docset to view."
     (let (keyword href)
       (while (re-search-forward "<\\([^> ]+\\)[ \t\n]*\\(.*?\\)>\\(\\(?:.\\|\n\\)*?\\)</\\1>" nil t)
         (setq keyword (match-string 3))
-        (if (equal (match-string 1) "a")
+        (if (equal (downcase (match-string 1)) "a")
             (progn
+              ;; If there are spaces inside KEYWORD, treat it as
+              ;; external link.
               (when (string-match-p "[ \t\n]+" keyword)
                 (setq href (match-string 2)))
               (replace-match "")
@@ -366,7 +368,7 @@ docset to view."
                                                      docsetutil-browse-url-function
                                                    #'docsetutil-search)
                                   'help-args (list (or href keyword))
-                                  'face 'link
+                                  'face (if href 'link 'font-lock-keyword-face)
                                   :type 'help-xref))
           (replace-match keyword nil t))
         (goto-char (match-beginning 0))))))
