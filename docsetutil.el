@@ -464,12 +464,12 @@ docset to view."
           (insert (docsetutil-fontify-cc-string
                    (delete-and-extract-region name-end end))))
          ((equal name "Parameters:")
-          ;; Test: arrayWithObjects:
+          (setq fill-prefix (make-string (+ 4 (current-column)) ?\s))
+          ;; Test: arrayWithObjects: and addObserver:selector:name:object:
           (while (re-search-forward "\\([^\r\n]+?\\)[ \t]\\{2,\\}\\(.*\\)" end t)
             (put-text-property (match-beginning 1) (match-end 1)
-                               'face 'italic)
+                               'face '(:underline t :inherit italic))
             (goto-char (match-beginning 2))
-            (setq fill-prefix (make-string (current-column) ?\s))
             (fill-region-as-paragraph (point) (match-end 2))
             (skip-chars-forward " \t\r\n")
             (when (> (point) end)
