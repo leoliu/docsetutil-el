@@ -517,7 +517,9 @@ The default value for BUFFER is current buffer."
                                   (match-beginning 0)
                                 limit))))
                 (goto-char name-end)
-                (docsetutil-format-api-row name beg name-end end)))
+                (docsetutil-format-api-row name beg name-end end)
+                (when (and limit (> (point) limit))
+                  (goto-char limit))))
             (set-marker limit nil)))
         ;; process full text results
         (while (re-search-forward "^[ \t]+[0-9.]+ \\(.*\\)$" nil t)
