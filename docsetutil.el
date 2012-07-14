@@ -434,17 +434,17 @@ The default value for BUFFER is current buffer."
                         (concat (match-string 3) (match-string 2)))))
           (save-match-data
             (cond
+             ;; xcode 3.x: /usr/share/man/man2/open.2.gz
+             ;; xcode 4.x: documentation/Darwin/Reference/ManPages/man2/open.2.html#//apple_ref/c/func/open
+             ((string-match "/\\(?:man\\|ManPages\\)/man\\([1-9]\\)/\\(.*\\)\\.\\1\\." path)
+              (setq help-function 'man
+                    help-args (list (concat (match-string 1 path) " "
+                                            (match-string 2 path)))))
              ((string-match "\\.html" path)
               (setq help-function docsetutil-browse-url-function
                     help-args (list (if (url-type (url-generic-parse-url path))
                                         path
-                                      (concat "file://" path)))))
-             ;; xcode 3.x: /usr/share/man/man2/open.2.gz
-             ;; xcode 4.x: documentation/Darwin/Reference/ManPages/man2/open.2.html#//apple_ref/c/func/open
-             ((string-match "/man/man\\([1-9]\\)/\\(.*\\)\\.[1-9]\\." path)
-              (setq help-function 'man
-                    help-args (list (concat (match-string 1 path) " "
-                                            (match-string 2 path)))))))
+                                      (concat "file://" path)))))))
           (delete-region (match-end 1) (line-end-position))
           (make-text-button
            (match-beginning 1) (match-end 1)
