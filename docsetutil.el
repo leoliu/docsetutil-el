@@ -52,6 +52,11 @@ Normally it resides in one of the following directories:
   :type 'integer
   :group 'docsetutil)
 
+(defcustom docsetutil-fontify-declaration t
+  "Fontify declarations using cc mode."
+  :type 'boolean
+  :group 'docsetutil)
+
 (defcustom docsetutil-use-text-tree t
   "Use hierarchical/tree format to display full text search results.
 When set, individual page and section search results are
@@ -418,6 +423,52 @@ docset to view."
         (replace-match
          (cdr (assoc (match-string 0) docsetutil-html-entity-list)))))))
 
+(defun docsetutil-setup-cc-buffer (&optional buf)
+  (let ((buf (or buf " *docsetutil cc mode*")))
+    (or (get-buffer buf)
+        (with-current-buffer (get-buffer-create buf)
+          (objc-mode)
+          (setq font-lock-mode t)
+          (funcall font-lock-function font-lock-mode)
+          (add-hook 'change-major-mode-hook 'font-lock-change-mode nil t)
+          (current-buffer)))))
+
+(defun docsetutil-fontify-cc-string (string)
+  (with-current-buffer (docsetutil-setup-cc-buffer)
+    (erase-buffer)
+    (insert string)
+    (font-lock-default-fontify-region (point-min) (point-max) nil)
+    (buffer-string)))
+
+(defun docsetutil-format-api-row (name beg name-end end)
+  (put-text-property beg name-end 'face 'bold)
+  (let ((fp fill-prefix)
+        (fc fill-column)
+        (end (copy-marker end)))
+    (setq fill-column docsetutil-fill-column)
+    (unwind-protect
+        (cond
+         ((member name '("Abstract:" "Return Value:" "Availability:"))
+          (setq fill-prefix (make-string (- (current-column) 6) ?\s))
+          (fill-region-as-paragraph name-end end))
+         ((and docsetutil-fontify-declaration (equal name "Declaration:"))
+          (insert (docsetutil-fontify-cc-string
+                   (delete-and-extract-region name-end end))))
+         ((equal name "Parameters:")
+          ;; Test: arrayWithObjects:
+          (while (re-search-forward "\\([^\r\n]+?\\)[ \t]\\{2,\\}\\(.*\\)" end t)
+            (put-text-property (match-beginning 1) (match-end 1)
+                               'face 'italic)
+            (goto-char (match-beginning 2))
+            (setq fill-prefix (make-string (current-column) ?\s))
+            (fill-region-as-paragraph (point) (match-end 2))
+            (skip-chars-forward " \t\r\n")
+            (when (> (point) end)
+              (goto-char end)))))
+      (setq fill-prefix fp
+            fill-column fc)
+      (set-marker end nil))))
+
 (defun docsetutil-highlight-search-results (&optional buffer)
   "Highlight docsetutil search results in BUFFER.
 The default value for BUFFER is current buffer."
@@ -458,19 +509,15 @@ The default value for BUFFER is current buffer."
                               (point-marker))))
                 (field-re "^[ \t]*\\([[:upper:]][[:word:][:blank:]]+:\\) "))
             (while (re-search-forward field-re limit t)
-              (put-text-property (match-beginning 1) (match-end 1) 'face 'bold)
-              (when (equal (match-string 1) "Abstract:")
-                (let ((fp fill-prefix)
-                      (fc fill-column))
-                  (setq fill-prefix (make-string (- (current-column) 6) ?\s)
-                        fill-column docsetutil-fill-column)
-                  (unwind-protect
-                      (fill-region-as-paragraph (point)
-                                                (if (re-search-forward field-re limit t)
-                                                    (match-beginning 0)
-                                                  (point-max)))
-                    (setq fill-prefix fp
-                          fill-column fc)))))
+              (let ((name (match-string 1))
+                    (name-end (point))
+                    (beg (match-beginning 1))
+                    (end (min (or limit (point-max))
+                              (if (re-search-forward field-re limit t)
+                                  (match-beginning 0)
+                                limit))))
+                (goto-char name-end)
+                (docsetutil-format-api-row name beg name-end end)))
             (set-marker limit nil)))
         ;; process full text results
         (while (re-search-forward "^[ \t]+[0-9.]+ \\(.*\\)$" nil t)
