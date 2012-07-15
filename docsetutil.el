@@ -43,7 +43,8 @@ Normally it resides in one of the following directories:
   :group 'docsetutil)
 
 (defcustom docsetutil-cache-file (locate-user-emacs-file "docsetutil")
-  "Cache file for docsetutil."
+  "Cache file for docsetutil.
+Set to nil to disable caching to disk."
   :type 'file
   :group 'docsetutil)
 
@@ -137,10 +138,12 @@ results."
   "Clear all cached data."
   (interactive)
   (when (and (or docsetutil-cache
-                 (/= 0 (nth 7 (file-attributes docsetutil-cache-file))))
+                 (and docsetutil-cache-file
+                      (/= 0 (nth 7 (file-attributes docsetutil-cache-file)))))
              (yes-or-no-p "Clear all cached docsetutil data? "))
     (setq docsetutil-cache nil)
-    (write-region "" nil docsetutil-cache-file nil 0)
+    (when docsetutil-cache-file
+      (write-region "" nil docsetutil-cache-file nil 0))
     (message "Docsetutil cache cleared")))
 
 (defun docsetutil-completions (query &optional path)
@@ -180,7 +183,8 @@ PATH is the path to the docset and defaults to
         (when (catch 'exit
                 (mapatoms (lambda (_) (throw 'exit t)) res))
           (push (list docset mtime res) docsetutil-cache)
-          (docsetutil-cache-save docsetutil-cache-file)
+          (when docsetutil-cache-file
+            (docsetutil-cache-save docsetutil-cache-file))
           res)))))
 
 (eval-when-compile (require 'hippie-exp))
@@ -588,9 +592,9 @@ With prefix, also include full text search results."
 (or docsetutil-docset-path
     (setq docsetutil-docset-path (caar (last (docsetutil-find-all-docsets)))))
 
-(when (and (not docsetutil-cache)
-           (file-readable-p docsetutil-cache-file))
-  (ignore-errors (docsetutil-cache-load docsetutil-cache-file)))
+(ignore-errors (and (not docsetutil-cache)
+                    (file-readable-p docsetutil-cache-file)
+                    (docsetutil-cache-load docsetutil-cache-file)))
 
 (provide 'docsetutil)
 ;;; docsetutil.el ends here
