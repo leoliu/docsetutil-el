@@ -159,8 +159,8 @@ PATH is the path to the docset and defaults to
       (assert (zerop (call-process docsetutil-program nil t nil
                                    "search" "-skip-text" "-query" query
                                    path))
-              nil "Process %s failed with non-zero exit code"
-              docsetutil-program)
+              nil "Process %s failed with non-zero exit code:\n%s"
+              docsetutil-program (buffer-string))
       (goto-char (point-min))
       (while (re-search-forward
               "^[ \t]*[^/]+/[^/]+/[^/]+/\\([^ \t\r\n]+\\)" nil t)
