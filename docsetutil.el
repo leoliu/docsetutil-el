@@ -334,9 +334,11 @@ docset to view."
            number default)
        (with-output-to-temp-buffer buf
          (loop for (path id bn . info) in docsets
+               for ver = (cdr (assoc "CFBundleVersion" info))
                for i from 1
                do
-               (princ (format "%-2d => %s" i
+               (princ (format "%-2d => %s%s" i
+                              (if ver (format "(v%s) " ver) "")
                               (or bn (file-name-nondirectory path))))
                (when (equal docsetutil-docset-path path)
                  (setq default i)
