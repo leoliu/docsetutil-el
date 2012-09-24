@@ -35,17 +35,17 @@
   "Executable for docsetutil.
 
 Normally it resides in one of the following directories:
-  
+
   1. /Applications/Xcode.app/Contents/Developer/usr/bin/
      (xcode 4.2 and above)
   2. /Developer/usr/bin/ (xcode 3.x)"
   :type 'file
   :group 'docsetutil)
 
-(defcustom docsetutil-cache-file (locate-user-emacs-file "docsetutil")
-  "Cache file for docsetutil.
+(defcustom docsetutil-cache-directory (locate-user-emacs-file "cache/docsets")
+  "Directory for docset caches.
 Set to nil to disable caching to disk."
-  :type 'file
+  :type 'directory
   :group 'docsetutil)
 
 (defcustom docsetutil-fill-column 75
@@ -98,58 +98,40 @@ results."
 
 ;;; Completion
 
-;; Each entry: (PATH MTIME OBARRAY)
-(defvar docsetutil-cache nil)
+(defvar docsetutil-cache nil)           ; (CACHE-ID . HASH-TABLE)
 
-(defun docsetutil-cache-prune (cache)
-  (loop for (path mtime ob) in cache
-        with paths = (mapcar 'car (docsetutil-find-all-docsets))
-        with seen = ()
-        when (and (not (member path seen))
-                  (member path paths))
-        collect (progn (push path seen) (list path mtime ob))))
+(defun docsetutil-cache-id (docset)
+  (let ((info (docsetutil-parse-docset-info docset t)))
+    (concat (cdr (assoc "CFBundleIdentifier" info))
+            "-v"
+            (cdr (assoc "CFBundleVersion" info)))))
 
-(defun docsetutil-cache-save (file)
-  (check-type file string)
-  (if docsetutil-cache
+(defun docsetutil-cache-read (cache-id)
+  (when docsetutil-cache-directory
+    (let ((file (expand-file-name cache-id docsetutil-cache-directory)))
+      (when (and (file-exists-p file)
+                 (/= 0 (nth 7 (file-attributes file))))
+        (let ((cache (with-temp-buffer
+                       (insert-file-contents file)
+                       (condition-case nil
+                           (read (current-buffer))
+                         (error
+                          (error "Failed to load malformed cache file: %s" file)))))
+              (ob (make-vector 37 0)))
+          (dolist (item cache)
+            (intern item ob))
+          (setq docsetutil-cache (cons cache-id ob))
+          ob)))))
+
+(defun docsetutil-cache-write (cache-id coll)
+  (when docsetutil-cache-directory
+    (or (file-exists-p docsetutil-cache-directory)
+        (make-directory docsetutil-cache-directory t))
+    (let ((file (expand-file-name cache-id docsetutil-cache-directory)))
       (with-temp-buffer
-        (prin1 (loop for (path mtime ob) in (docsetutil-cache-prune
-                                             docsetutil-cache)
-                     with syms = ()
-                     do (mapatoms (lambda (s) (push (symbol-name s) syms)) ob)
-                     when syms
-                     collect (list path mtime syms))
+        (prin1 (loop for s being the symbols of coll collect (symbol-name s))
                (current-buffer))
-        (write-region nil nil file nil 0))
-    (message (format-time-string
-              "[%Y-%m-%dT%T%z] (info) docsetutil: no cache to save"))))
-
-(defun docsetutil-cache-load (file)
-  (assert (file-readable-p file))
-  (unless (zerop (nth 7 (file-attributes file)))
-    (let ((cache (with-temp-buffer
-                   (insert-file-contents file)
-                   (condition-case nil
-                       (read (current-buffer))
-                     (error
-                      (error "Failed to load malformed cache file: %s" file))))))
-      (setq docsetutil-cache
-            (loop for (path mtime names) in cache
-                  for ob = (make-vector 37 0)
-                  do (mapc (lambda (n) (intern n ob)) names)
-                  collect (list path mtime ob))))))
-
-(defun docsetutil-cache-reset ()
-  "Clear all cached data."
-  (interactive)
-  (when (and (or docsetutil-cache
-                 (and docsetutil-cache-file
-                      (/= 0 (nth 7 (file-attributes docsetutil-cache-file)))))
-             (yes-or-no-p "Clear all cached docsetutil data? "))
-    (setq docsetutil-cache nil)
-    (when docsetutil-cache-file
-      (write-region "" nil docsetutil-cache-file nil 0))
-    (message "Docsetutil cache cleared")))
+        (write-region nil nil file nil 0)))))
 
 (defun docsetutil-completions (query &optional path)
   "Return a collection of names in the output of QUERY to a docset.
@@ -158,8 +140,7 @@ PATH is the path to the docset and defaults to
 `docsetutil-docset-path'."
   (check-type query string "Query must be a string")
   (assert (or path docsetutil-docset-path) nil "No docset path provided")
-  (let ((path (or path docsetutil-docset-path))
-        (res (make-vector 17 0)))
+  (let ((path (or path docsetutil-docset-path)))
     (with-temp-buffer
       (assert (zerop (call-process docsetutil-program nil t nil
                                    "search" "-skip-text" "-query" query
@@ -167,30 +148,33 @@ PATH is the path to the docset and defaults to
               nil "Process %s failed with non-zero exit code:\n%s"
               docsetutil-program (buffer-string))
       (goto-char (point-min))
-      (while (re-search-forward
-              "^[ \t]*[^/]+/[^/]+/[^/]+/\\([^ \t\r\n]+\\)" nil t)
-        (intern (match-string 1) res)))
-    res))
+      (let (collection)
+        (while (re-search-forward
+                "^[ \t]*[^/]+/[^/]+/[^/]+/\\([^ \t\r\n]+\\)" nil t)
+          (or collection (setq collection (make-vector 17 0)))
+          (intern (match-string 1) collection))
+        collection))))
 
 ;; Benchmark on an iMac 2.7 GHz Intel Core i5
-;;  - iOS 5.1 Library: 2.56 seconds
-;;  - OS X 10.7 Core Library: 7.35 seconds (5.3 seconds for C/*/*/*)
+;;  - iOS 6.0 Library: 2.76 seconds (0.18 seconds from disk cache)
+;;  - OS X 10.8 Core Library: 8.56 seconds (0.9 seconds from disk cache)
 (defun docsetutil-objc-completions (&optional docset)
   "Return completions for C and Objective-C."
-  (message "Prepare docset completions...")
   (let* ((docset (or docset docsetutil-docset-path))
-         (cache (assoc docset docsetutil-cache))
-         (mtime (nth 5 (file-attributes docset))))
-    (if (and cache (equal (second cache) mtime))
-        (third cache)
-      (let ((res (docsetutil-completions "C/*/*/* Objective-C/*/*/*" docset)))
-        ;; Cache it unless empty.
-        (when (catch 'exit
-                (mapatoms (lambda (_) (throw 'exit t)) res))
-          (push (list docset mtime res) docsetutil-cache)
-          (when docsetutil-cache-file
-            (docsetutil-cache-save docsetutil-cache-file))
-          res)))))
+         (cache-id (docsetutil-cache-id docset))
+         (cache (if (equal (car docsetutil-cache) cache-id)
+                    (cdr docsetutil-cache)
+                  (docsetutil-cache-read cache-id))))
+    (or cache
+        (let ((coll (progn
+                      (message "Prepare docset completions...")
+                      (docsetutil-completions
+                       "C/*/*/* C++/*/*/* Objective-C/*/*/*" docset))))
+          ;; Cache it unless empty.
+          (when coll
+            (setq docsetutil-cache (cons cache-id coll))
+            (docsetutil-cache-write cache-id coll))
+          coll))))
 
 (eval-when-compile (require 'hippie-exp))
 
@@ -263,7 +247,7 @@ are strings."
          (infofile (expand-file-name "Contents/Info.plist" docset)))
     (cond
      ((and error (not (file-exists-p infofile)))
-      (signal 'file-error (list 'file-exists-p infofile)))
+      (error "No such file `%s'" infofile))
      ((file-exists-p infofile)
       (with-temp-buffer
         (docsetutil-insert-plist-contents infofile)
@@ -600,10 +584,6 @@ With prefix, also include full text search results."
 ;;; Finish up
 (or docsetutil-docset-path
     (setq docsetutil-docset-path (caar (last (docsetutil-find-all-docsets)))))
-
-(ignore-errors (and (not docsetutil-cache)
-                    (file-readable-p docsetutil-cache-file)
-                    (docsetutil-cache-load docsetutil-cache-file)))
 
 (provide 'docsetutil)
 ;;; docsetutil.el ends here

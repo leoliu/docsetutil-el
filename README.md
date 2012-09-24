@@ -48,5 +48,5 @@ If you use `hippie-expand`, you may want to add
 ## Notes ##
 
 When you first run `docsetutil-search`, it may take a few seconds to
-build the completion table. The results are cached to disk (see
-`docsetutil-cache-file`).
+build the completion table, which is then cached to disk in the
+directory `docsetutil-cache-directory`.
