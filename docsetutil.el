@@ -545,15 +545,20 @@ The default value for BUFFER is current buffer."
   "Use `docsetutil' to search documentation on TERM.
 With prefix, also include full text search results."
   (interactive
-   (list (let ((def (funcall
-                     (or docsetutil-current-word-function 'current-word))))
-           (completing-read
-            (format (if def "Apple docset %s search (default: %s): "
-                      "Apple docset %s search: ")
-                    (if current-prefix-arg "full text" "API") def)
-            (docsetutil-objc-completions)
-            nil nil nil 'docsetutil-search-history def))
-         current-prefix-arg))
+   (progn
+     (assert docsetutil-docset-path nil
+             "No docset chosen; Please run M-x docsetutil-choose-docset")
+     (assert (file-exists-p docsetutil-docset-path) nil
+             "DocSet `%s' does not exist" docsetutil-docset-path)
+     (list (let ((def (funcall
+                       (or docsetutil-current-word-function 'current-word))))
+             (completing-read
+              (format (if def "Apple docset %s search (default: %s): "
+                        "Apple docset %s search: ")
+                      (if current-prefix-arg "full text" "API") def)
+              (docsetutil-objc-completions)
+              nil nil nil 'docsetutil-search-history def))
+           current-prefix-arg)))
   ;; Strip leading and trailing blank chars
   (when (string-match "^[ \t\n]*\\(.*?\\)[ \t\n]*$" term)
     (setq term (match-string 1 term)))
