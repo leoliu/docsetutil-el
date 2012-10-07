@@ -1,5 +1,7 @@
 # Emacs Interface to docsetutil on OSX #
 
+![emacs-docsetutil-api-doc](http://i.imgur.com/xFM15.png)
+
 ## Usage ##
 1. Install
 
