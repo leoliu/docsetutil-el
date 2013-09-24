@@ -1,4 +1,4 @@
-# Emacs Interface to docsetutil on OSX #
+# Use Cocoa/iOS documentations in emacs #
 
 ![emacs-docsetutil-api-doc](http://i.imgur.com/xFM15.png)
 

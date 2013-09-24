@@ -1,8 +1,9 @@
-;;; docsetutil.el --- Emacs Interface to `docsetutil'
+;;; docsetutil.el --- use Cocoa/iOS documentations in emacs  -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2011, 2012  Leo Liu
+;; Copyright (C) 2011-2013  Leo Liu
 
 ;; Author: Leo Liu <sdl.web@gmail.com>
+;; Version: 0.5
 ;; Keywords: c, processes, tools, docs
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -138,8 +139,10 @@ results."
 Mutiple queries can be specified by seperating them with space.
 PATH is the path to the docset and defaults to
 `docsetutil-docset-path'."
-  (check-type query string "Query must be a string")
-  (assert (or path docsetutil-docset-path) nil "No docset path provided")
+  (check-type query string "QUERY must be a string")
+  (or path
+      docsetutil-docset-path
+      (error "No docset path provided"))
   (let ((path (or path docsetutil-docset-path)))
     (with-temp-buffer
       (assert (zerop (call-process docsetutil-program nil t nil
@@ -176,12 +179,10 @@ PATH is the path to the docset and defaults to
             (docsetutil-cache-write cache-id coll))
           coll))))
 
-(eval-when-compile (require 'hippie-exp))
-
 ;;;###autoload
 (defun try-docsetutil-objc-completions (old)
   "A function suitable for `hippie-expand-try-functions-list'."
-  (require 'hippie-exp)
+  (eval-and-compile (require 'hippie-exp))
   (unless old
     (he-init-string (save-excursion
                       (skip-syntax-backward "w_")
@@ -307,41 +308,45 @@ docset to view."
       (if all (mapc fmt-docset (docsetutil-find-all-docsets))
         (funcall fmt-docset docset)))))
 
+(defun docsetutil-read-docset ()
+  (save-window-excursion
+    (let ((docsets (docsetutil-find-all-docsets))
+          (split-width-threshold nil)
+          (buf " *docsets*")
+          number default)
+      (with-output-to-temp-buffer buf
+        (loop for (path id bn . info) in docsets
+              for ver = (cdr (assoc "CFBundleVersion" info))
+              for i from 1
+              do
+              (princ (format "%-2d => %s%s" i
+                             (if ver (format "(v%s) " ver) "")
+                             (or bn (file-name-nondirectory path))))
+              (when (equal docsetutil-docset-path path)
+                (setq default i)
+                (princ " (current)"))
+              (princ "\n")))
+      (with-current-buffer buf
+        (setq truncate-lines t)
+        (when default
+          (forward-line (1- default)))
+        (let ((inhibit-read-only t))
+          (put-text-property (line-beginning-position) (line-end-position)
+                             'face 'bold-italic)))
+      (fit-window-to-buffer (get-buffer-window buf))
+      (setq number (read-number "Choose a docset: " default))
+      (car (nth (1- number) docsets)))))
+
 ;;;###autoload
 (defun docsetutil-choose-docset (docset)
   "Choose a DOCSET from the list by `docsetutil-find-all-docsets'."
-  (interactive
-   (save-window-excursion
-     (let ((docsets (docsetutil-find-all-docsets))
-           (split-width-threshold nil)
-           (buf " *docsets*")
-           number default)
-       (with-output-to-temp-buffer buf
-         (loop for (path id bn . info) in docsets
-               for ver = (cdr (assoc "CFBundleVersion" info))
-               for i from 1
-               do
-               (princ (format "%-2d => %s%s" i
-                              (if ver (format "(v%s) " ver) "")
-                              (or bn (file-name-nondirectory path))))
-               (when (equal docsetutil-docset-path path)
-                 (setq default i)
-                 (princ " (current)"))
-               (princ "\n")))
-       (with-current-buffer buf
-         (setq truncate-lines t)
-         (when default
-           (forward-line (1- default)))
-         (let ((inhibit-read-only t))
-           (put-text-property (line-beginning-position) (line-end-position)
-                              'face 'bold-italic)))
-       (fit-window-to-buffer (get-buffer-window buf))
-       (setq number (read-number "Choose a docset: " default))
-       (list (car (nth (1- number) docsets))))))
+  (interactive (list (docsetutil-read-docset)))
   (if (not docset)
       (message "No docset specified")
     (setq docsetutil-docset-path docset)
-    (message "Docset: %s" docset)))
+    (when (called-interactively-p 'interactive)
+      (message "Docset: %s" docset))
+    docset))
 
 ;;; Docset Query
 
