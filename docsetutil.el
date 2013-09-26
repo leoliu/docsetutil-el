@@ -313,20 +313,21 @@ docset to view."
     (let ((docsets (docsetutil-find-all-docsets))
           (split-width-threshold nil)
           (buf " *docsets*")
-          number default)
+          (i 0)
+          number
+          default)
       (with-output-to-temp-buffer buf
         (mapc (lambda (docset)
+                (incf i)
                 (pcase-let ((`(,path ,_ ,bn . ,info) docset))
-                  (loop for ver = (cdr (assoc "CFBundleVersion" info))
-                        for i from 1
-                        do
-                        (princ (format "%-2d => %s%s" i
-                                       (if ver (format "(v%s) " ver) "")
-                                       (or bn (file-name-nondirectory path))))
-                        (when (equal docsetutil-docset-path path)
-                          (setq default i)
-                          (princ " (current)"))
-                        (princ "\n"))))
+                  (let ((ver (cdr (assoc "CFBundleVersion" info))))
+                    (princ (format "%-2d => %s%s" i
+                                   (if ver (format "(v%s) " ver) "")
+                                   (or bn (file-name-nondirectory path))))
+                    (when (equal docsetutil-docset-path path)
+                      (setq default i)
+                      (princ " (current)"))
+                    (princ "\n"))))
               docsets))
       (with-current-buffer buf
         (setq truncate-lines t)
