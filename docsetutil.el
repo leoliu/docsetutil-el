@@ -3,7 +3,7 @@
 ;; Copyright (C) 2011-2013  Leo Liu
 
 ;; Author: Leo Liu <sdl.web@gmail.com>
-;; Version: 0.5
+;; Version: 0.6
 ;; Keywords: c, processes, tools, docs
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -32,14 +32,14 @@
   :prefix "docsetutil-"
   :group 'tools)
 
-(defcustom docsetutil-program "docsetutil"
+(defcustom docsetutil-program
+  (or (and (executable-find "docsetutil") "docsetutil")
+      (and (file-exists-p "/Applications/Xcode.app/Contents/Developer/usr/bin/docsetutil")
+           "/Applications/Xcode.app/Contents/Developer/usr/bin/docsetutil")
+      "docsetutil")
   "Executable for docsetutil.
-
-Normally it resides in one of the following directories:
-
-  1. /Applications/Xcode.app/Contents/Developer/usr/bin/
-     (xcode 4.2 and above)
-  2. /Developer/usr/bin/ (xcode 3.x)"
+Normally it is in the following directory:
+  /Applications/Xcode.app/Contents/Developer/usr/bin/"
   :type 'file
   :group 'docsetutil)
 
@@ -79,7 +79,7 @@ results."
 
 ;;;; END OF DEFCUSTOMS
 
-;; See: http://goo.gl/jiYPv
+;; See: http://goo.gl/jlQX0w
 (defvar docsetutil-docset-search-paths
   '("/Applications/Xcode.app/Contents/Developer/Documentation/DocSets"
     "/Developer/Documentation/DocSets"
@@ -207,7 +207,7 @@ PATH is the path to the docset and defaults to
   (save-restriction
     (narrow-to-region (point) (point))
     (insert-file-contents file)
-    (when (looking-at-p "^bplist00")
+    (when (looking-at-p "^bplist")
       ;; /usr/libexec/PlistBuddy or /usr/bin/plutil can convert bplist
       ;; to xml1 format.
       (or (executable-find "plutil")
@@ -515,7 +515,7 @@ The default value for BUFFER is current buffer."
              :type 'help-xref)))))))
 
 ;;;###autoload
-(defun docsetutil-search (term &optional full-text)
+(defun docsetutil-search (term &optional full-text raw)
   "Use `docsetutil' to search documentation on TERM.
 With prefix, also include full text search results."
   (interactive
@@ -532,7 +532,8 @@ With prefix, also include full text search results."
                       (if current-prefix-arg "full text" "API") def)
               (docsetutil-objc-completions)
               nil nil nil 'docsetutil-search-history def))
-           current-prefix-arg)))
+           (and (= 4 (prefix-numeric-value current-prefix-arg)) t)
+           (and (= 16 (prefix-numeric-value current-prefix-arg)) t))))
   ;; Strip leading and trailing blank chars
   (when (string-match "^[ \t\n]*\\(.*?\\)[ \t\n]*$" term)
     (setq term (match-string 1 term)))
@@ -555,7 +556,8 @@ With prefix, also include full text search results."
           (apply #'call-process docsetutil-program nil standard-output nil
                  `("search" ,@(and docsetutil-use-text-tree '("-text-tree"))
                    "-skip-api" "-query" ,term ,docsetutil-docset-path))))
-      (docsetutil-highlight-search-results (help-buffer))
+      (unless raw
+        (docsetutil-highlight-search-results (help-buffer)))
       (let ((help-window (get-buffer-window (help-buffer))))
         (when help-window
           (fit-window-to-buffer help-window (floor (frame-height) 2)))))))
