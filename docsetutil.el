@@ -217,24 +217,24 @@ PATH is the path to the docset and defaults to
                       "plutil -convert xml1 -o - -" nil t))
               nil "Convert `%s' to xml failed" file))))
 
-(eval-when-compile (require 'xml))      ; pacify compiler warnings
+(defun docsetutil-normalise-plist-keyvals (elements)
+  (loop for x in elements
+        when (consp x)
+        collect (pcase (car x)
+                  (`array (docsetutil-normalise-plist-keyvals (cddr x)))
+                  (_ (third x)))))
+
 (defun docsetutil-parse-plist-region (beg end)
   "Parse a plist region and return an alist for the key-value pairs."
-  (let ((children
-         (if (fboundp 'libxml-parse-xml-region)
-             (cddr (caddr (libxml-parse-xml-region beg end)))
-           (require 'xml)
-           (let ((rm-if (lambda (pred seq)
-                          (delq nil (mapcar (lambda (x)
-                                              (and (not (funcall pred x)) x))
-                                            seq)))))
-             (funcall rm-if 'stringp
-                      (xml-node-children
-                       (car (funcall rm-if 'stringp
-                                     (xml-node-children
-                                      (car (xml-parse-region beg end)))))))))))
-    (loop for (x y) on children by 'cddr
-          collect (cons (third x) (third y)))))
+  (let ((keyvals (docsetutil-normalise-plist-keyvals
+                  (if (fboundp 'libxml-parse-xml-region)
+                      (cddr (caddr (libxml-parse-xml-region beg end)))
+                    (eval-and-compile (require 'xml))
+                    (xml-node-children
+                     (car (xml-get-children
+                           (car (xml-parse-region beg end)) 'dict)))))))
+    (loop for (k v) on keyvals by #'cddr
+          collect (cons k v))))
 
 (defun docsetutil-parse-docset-info (docset &optional error)
   "Parse Info.plist file of a docset if present.
@@ -302,7 +302,10 @@ docset to view."
                                                        (cdddr doc))))
                      do
                      (insert (propertize (format fmt k) 'face 'bold))
-                     (insert (or v "(none)") "\n")))
+                     (insert (cond
+                              ((consp v) (mapconcat 'identity v " "))
+                              ((stringp v) v)
+                              (t "(none)")) "\n")))
              (insert (make-string 75 ?-) "\n\n")))))
     (with-output-to-temp-buffer "*DocsetInfo*"
       (if all (mapc fmt-docset (docsetutil-find-all-docsets))
