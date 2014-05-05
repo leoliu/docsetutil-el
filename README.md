@@ -7,9 +7,9 @@
 
     (require 'docsetutil)
 
-2. You may consider binding `docsetutil-search` to a key, for example:
+2. You may consider binding `docsetutil-api` to a key, for example:
 
-    (define-key help-map "d" 'docsetutil-search) ; C-h d
+    (define-key help-map "d" 'docsetutil-api)  ; C-h d
 
 3. Choose a docset to use:
 
@@ -17,11 +17,15 @@
 
 4. API search with completion:
 
-    M-x docsetutil-search
+    M-x docsetutil-api
 
-5. Full text search:
+5. API browse
 
-    C-u M-x docsetutil-search
+    M-x docsetutil-browse-api
+
+6. Full text search:
+
+    M-x docsetutil-fulltext
 
 ## Objc Completions ##
 
@@ -49,6 +53,7 @@ If you use `hippie-expand`, you may want to add
 
 ## Notes ##
 
-When you first run `docsetutil-search`, it may take a few seconds to
-build the completion table, which is then cached to disk in the
-directory `docsetutil-cache-directory`.
+When you first run `docsetutil-api`, `docsetutil-browse-api` or
+`docsetutil-fulltext`, it may take a few seconds to build the
+completion table, which is then cached to disk in the directory
+`docsetutil-cache-directory`.

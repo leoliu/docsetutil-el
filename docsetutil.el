@@ -1,9 +1,9 @@
 ;;; docsetutil.el --- use Cocoa/iOS documentations in emacs  -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2011-2013  Leo Liu
+;; Copyright (C) 2011-2014  Leo Liu
 
 ;; Author: Leo Liu <sdl.web@gmail.com>
-;; Version: 0.6
+;; Version: 0.7
 ;; Keywords: c, processes, tools, docs
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -24,8 +24,12 @@
 
 ;;; Code:
 
-(eval-when-compile (require 'cl))
+(require 'cl-lib)
 (require 'url-parse)
+
+(eval-and-compile
+  (unless (fboundp 'user-error)
+    (defalias 'user-error 'error)))
 
 (defgroup docsetutil nil
   "Group for docsetutil."
@@ -67,7 +71,7 @@ results."
   :type 'boolean
   :group 'docsetutil)
 
-(defcustom docsetutil-browse-url-function 'browse-url
+(defcustom docsetutil-browse-url-function #'browse-url
   "Function used to browse URL in search outputs."
   :type 'function
   :group 'docsetutil)
@@ -96,6 +100,14 @@ results."
 (defvar docsetutil-search-history nil)
 
 (defconst docsetutil-api-regexp "^ \\(.*?\\)   \\(.*?\\) -- \\(.*\\)$")
+
+(defun docsetutil-trim (s)
+  "Strip leading and trailing blank chars in string S."
+  (replace-regexp-in-string "^[ \t\n]*\\(.*?\\)[ \t\n]*$" "\\1" s))
+
+(defun docsetutil-run (buffer &rest args)
+  (apply #'process-file docsetutil-program nil buffer nil
+         (cl-remove-if #'null args)))
 
 ;;; Completion
 
@@ -130,7 +142,7 @@ results."
         (make-directory docsetutil-cache-directory t))
     (let ((file (expand-file-name cache-id docsetutil-cache-directory)))
       (with-temp-buffer
-        (prin1 (loop for s being the symbols of coll collect (symbol-name s))
+        (prin1 (cl-loop for s being the symbols of coll collect (symbol-name s))
                (current-buffer))
         (write-region nil nil file nil 0)))))
 
@@ -139,17 +151,17 @@ results."
 Mutiple queries can be specified by seperating them with space.
 PATH is the path to the docset and defaults to
 `docsetutil-docset-path'."
-  (check-type query string "QUERY must be a string")
+  (cl-check-type query string)
   (or path
       docsetutil-docset-path
       (error "No docset path provided"))
   (let ((path (or path docsetutil-docset-path)))
     (with-temp-buffer
-      (assert (zerop (call-process docsetutil-program nil t nil
-                                   "search" "-skip-text" "-query" query
-                                   path))
-              nil "Process %s failed with non-zero exit code:\n%s"
-              docsetutil-program (buffer-string))
+      (cl-assert (zerop (call-process docsetutil-program nil t nil
+                                      "search" "-skip-text" "-query" query
+                                      path))
+                 nil "Process %s failed with non-zero exit code:\n%s"
+                 docsetutil-program (buffer-string))
       (goto-char (point-min))
       (let (collection)
         (while (re-search-forward
@@ -192,7 +204,7 @@ PATH is the path to the docset and defaults to
           (and (not (equal he-search-string ""))
                (sort (all-completions he-search-string
                                       (docsetutil-objc-completions))
-                     'string-lessp))))
+                     #'string-lessp))))
   (if (null he-expand-list)
       (progn
         (if old (he-reset-string))
@@ -212,29 +224,29 @@ PATH is the path to the docset and defaults to
       ;; to xml1 format.
       (or (executable-find "plutil")
           (error "Can not process binary plist file"))
-      (assert (zerop (shell-command-on-region
-                      (point-min) (point-max)
-                      "plutil -convert xml1 -o - -" nil t))
-              nil "Convert `%s' to xml failed" file))))
+      (cl-assert (zerop (shell-command-on-region
+                         (point-min) (point-max)
+                         "plutil -convert xml1 -o - -" nil t))
+                 nil "Convert `%s' to xml failed" file))))
 
 (defun docsetutil-normalise-plist-keyvals (elements)
-  (loop for x in elements
-        when (consp x)
-        collect (pcase (car x)
-                  (`array (docsetutil-normalise-plist-keyvals (cddr x)))
-                  (_ (third x)))))
+  (cl-loop for x in elements
+           when (consp x)
+           collect (pcase (car x)
+                     (`array (docsetutil-normalise-plist-keyvals (cddr x)))
+                     (_ (cl-third x)))))
 
 (defun docsetutil-parse-plist-region (beg end)
   "Parse a plist region and return an alist for the key-value pairs."
   (let ((keyvals (docsetutil-normalise-plist-keyvals
                   (if (fboundp 'libxml-parse-xml-region)
-                      (cddr (caddr (libxml-parse-xml-region beg end)))
+                      (cddr (cl-caddr (libxml-parse-xml-region beg end)))
                     (eval-and-compile (require 'xml))
                     (xml-node-children
                      (car (xml-get-children
                            (car (xml-parse-region beg end)) 'dict)))))))
-    (loop for (k v) on keyvals by #'cddr
-          collect (cons k v))))
+    (cl-loop for (k v) on keyvals by #'cddr
+             collect (cons k v))))
 
 (defun docsetutil-parse-docset-info (docset &optional error)
   "Parse Info.plist file of a docset if present.
@@ -264,10 +276,10 @@ Each item in the return value has the form:
                              (let* ((info (docsetutil-parse-docset-info d))
                                     (id (cdr (assoc "CFBundleIdentifier" info)))
                                     (name (cdr (assoc "CFBundleName" info))))
-                               (list* d id name info)))
+                               (cl-list* d id name info)))
                            (directory-files path t "\\.docset\\'")))
-                 (loop for p in (or paths docsetutil-docset-search-paths)
-                       when (file-directory-p p) collect p))))
+                 (cl-loop for p in (or paths docsetutil-docset-search-paths)
+                          when (file-directory-p p) collect p))))
 
 (defun docsetutil-view-docset-info (docset &optional all)
   "View DOCSET information.
@@ -281,7 +293,7 @@ docset to view."
              (completing-read "Docset: " (docsetutil-find-all-docsets))
            docsetutil-docset-path)
          (= (prefix-numeric-value current-prefix-arg) 16)))
-  (assert docset nil "No docset provided")
+  (or docset (error "No docset provided"))
   (let ((docset (if (stringp docset)
                     (assoc docset (docsetutil-find-all-docsets))
                   docset))
@@ -293,19 +305,19 @@ docset to view."
                                  'face 'font-lock-comment-face) "\n\n")
              (insert (propertize (file-name-nondirectory (car doc))
                                  'face 'bold-italic) ":\n\n")
-             (when (cdddr doc)
-               (loop for (k . v) in (cdddr doc)
-                     with fmt = (format "%%%ds: "
-                                        (apply 'max
-                                               (mapcar (lambda (x)
-                                                         (length (car x)))
-                                                       (cdddr doc))))
-                     do
-                     (insert (propertize (format fmt k) 'face 'bold))
-                     (insert (cond
-                              ((consp v) (mapconcat 'identity v " "))
-                              ((stringp v) v)
-                              (t "(none)")) "\n")))
+             (when (cl-cdddr doc)
+               (cl-loop for (k . v) in (cl-cdddr doc)
+                        with fmt = (format "%%%ds: "
+                                           (apply 'max
+                                                  (mapcar (lambda (x)
+                                                            (length (car x)))
+                                                          (cl-cdddr doc))))
+                        do
+                        (insert (propertize (format fmt k) 'face 'bold))
+                        (insert (cond
+                                 ((consp v) (mapconcat 'identity v " "))
+                                 ((stringp v) v)
+                                 (t "(none)")) "\n")))
              (insert (make-string 75 ?-) "\n\n")))))
     (with-output-to-temp-buffer "*DocsetInfo*"
       (if all (mapc fmt-docset (docsetutil-find-all-docsets))
@@ -321,7 +333,7 @@ docset to view."
           default)
       (with-output-to-temp-buffer buf
         (mapc (lambda (docset)
-                (incf i)
+                (cl-incf i)
                 (pcase-let ((`(,path ,_ ,bn . ,info) docset))
                   (let ((ver (cdr (assoc "CFBundleVersion" info))))
                     (princ (format "%-2d => %s%s" i
@@ -442,7 +454,7 @@ docset to view."
   "Highlight docsetutil search results in BUFFER.
 The default value for BUFFER is current buffer."
   (let ((inhibit-read-only t) path missing help-function help-args)
-    (with-current-buffer buffer
+    (with-current-buffer (or buffer (current-buffer))
       (save-excursion
         (docsetutil-wash-html-tags)
         (goto-char (point-min))
@@ -514,57 +526,71 @@ The default value for BUFFER is current buffer."
              'help-args help-args
              :type 'help-xref)))))))
 
+(defun docsetutil-completing-read (&optional fulltext)
+  (or docsetutil-docset-path
+      (call-interactively #'docsetutil-choose-docset))
+  (or (and docsetutil-docset-path
+           (file-exists-p docsetutil-docset-path))
+      (error "DocSet `%s' does not exist" docsetutil-docset-path))
+  (let ((default (funcall (or docsetutil-current-word-function
+                              #'current-word))))
+    (docsetutil-trim
+     (completing-read
+      (format (if default "Apple docset %s search (default: %s): "
+                "Apple docset %s search: ")
+              (if fulltext "full text" "API") default)
+      (docsetutil-objc-completions)
+      nil nil nil 'docsetutil-search-history default))))
+
+(define-obsolete-function-alias 'docsetutil-search 'docsetutil-api "2014-05-05")
+
 ;;;###autoload
-(defun docsetutil-search (term &optional full-text raw)
+(defun docsetutil-api (term &optional raw browse)
   "Use `docsetutil' to search documentation on TERM.
 With prefix, also include full text search results."
-  (interactive
-   (progn
-     (assert docsetutil-docset-path nil
-             "No docset chosen; Please run M-x docsetutil-choose-docset")
-     (assert (file-exists-p docsetutil-docset-path) nil
-             "DocSet `%s' does not exist" docsetutil-docset-path)
-     (list (let ((def (funcall
-                       (or docsetutil-current-word-function 'current-word))))
-             (completing-read
-              (format (if def "Apple docset %s search (default: %s): "
-                        "Apple docset %s search: ")
-                      (if current-prefix-arg "full text" "API") def)
-              (docsetutil-objc-completions)
-              nil nil nil 'docsetutil-search-history def))
-           (and (= 4 (prefix-numeric-value current-prefix-arg)) t)
-           (and (= 16 (prefix-numeric-value current-prefix-arg)) t))))
-  ;; Strip leading and trailing blank chars
-  (when (string-match "^[ \t\n]*\\(.*?\\)[ \t\n]*$" term)
-    (setq term (match-string 1 term)))
+  (interactive (list (docsetutil-completing-read) current-prefix-arg))
   ;; For API search, space is used to separate terms i.e. 'nsstring
   ;; nsnumber' returns results for both NSString and NSNumber.
-  (let ((api (with-output-to-string
-               (call-process docsetutil-program nil standard-output nil
-                             "search" "-skip-text" "-verbose" "-query"
-                             term docsetutil-docset-path))))
-    (if (and (not full-text)
-             (not (string-match-p "[ \t]+" term))
-             (string-match "^Found total of 0 API matches in.*$" api))
-        (message "%s" (match-string 0 api))
-      (help-setup-xref (list #'docsetutil-search term full-text)
+  (with-temp-buffer
+    (docsetutil-run t "search" "-skip-text" "-verbose"
+                    "-query" term docsetutil-docset-path)
+    (goto-char (point-min))
+    (cond
+     ((and (not (string-match-p "[ \t]+" term)) ;Single term search
+           (re-search-forward "\\`Found total of 0 API matches in.*$" nil t))
+      (user-error "%s" (match-string 0)))
+     (browse
+      (docsetutil-highlight-search-results)
+      (car (button-get (forward-button 1) 'help-args)))
+     (t
+      (help-setup-xref (list #'docsetutil-api term raw)
                        (called-interactively-p 'interactive))
       (with-help-window (help-buffer)
-        (princ api)
-        (when full-text
-          (princ "Full text search results:\n")
-          (apply #'call-process docsetutil-program nil standard-output nil
-                 `("search" ,@(and docsetutil-use-text-tree '("-text-tree"))
-                   "-skip-api" "-query" ,term ,docsetutil-docset-path))))
-      (unless raw
-        (docsetutil-highlight-search-results (help-buffer)))
-      (let ((help-window (get-buffer-window (help-buffer))))
-        (when help-window
-          (fit-window-to-buffer help-window (floor (frame-height) 2)))))))
+        (princ (buffer-string))
+        (unless raw
+          (docsetutil-highlight-search-results standard-output)))
+      (pcase (get-buffer-window (help-buffer))
+        ((and w (guard w)) (fit-window-to-buffer w (floor (frame-height) 2))))))))
 
-;;; Finish up
-(or docsetutil-docset-path
-    (setq docsetutil-docset-path (caar (last (docsetutil-find-all-docsets)))))
+;;;###autoload
+(defun docsetutil-browse-api (term)
+  (interactive (list (docsetutil-completing-read)))
+  (funcall docsetutil-browse-url-function (docsetutil-api term nil t)))
+
+;;;###autoload
+(defun docsetutil-fulltext (term &optional raw)
+  (interactive (list (docsetutil-completing-read t) current-prefix-arg))
+  (help-setup-xref (list #'docsetutil-fulltext term raw)
+                   (called-interactively-p 'interactive))
+  (with-help-window (help-buffer)
+    (princ "Full text search results:\n")
+    (docsetutil-run standard-output
+                    "search" (and docsetutil-use-text-tree "-text-tree")
+                    "-query" term docsetutil-docset-path)
+    (unless raw
+      (docsetutil-highlight-search-results standard-output)))
+  (pcase (get-buffer-window (help-buffer))
+    ((and w (guard w)) (fit-window-to-buffer w (floor (frame-height) 2)))))
 
 (provide 'docsetutil)
 ;;; docsetutil.el ends here
