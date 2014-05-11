@@ -371,8 +371,8 @@ docset to view."
 (eval-when-compile (require 'html2text)) ; for html2text-replace-list
 
 (defun docsetutil-wash-html-tags (&optional buffer)
-  (or buffer (setq buffer (current-buffer)))
-  (with-current-buffer buffer
+  (with-current-buffer (or buffer (current-buffer))
+    (goto-char (point-min))
     (let (keyword href)
       (while (re-search-forward "<\\([^> ]+\\)[ \t\n]*\\(.*?\\)>\\(\\(?:.\\|\n\\)*?\\)</\\1>" nil t)
         (setq keyword (match-string 3))
@@ -586,7 +586,7 @@ With prefix, also include full text search results."
     (princ "Full text search results:\n")
     (docsetutil-run standard-output
                     "search" (and docsetutil-use-text-tree "-text-tree")
-                    "-query" term docsetutil-docset-path)
+                    "-skip-api" "-query" term docsetutil-docset-path)
     (unless raw
       (docsetutil-highlight-search-results standard-output)))
   (pcase (get-buffer-window (help-buffer))
