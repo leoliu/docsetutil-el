@@ -27,22 +27,22 @@
 
     M-x docsetutil-fulltext
 
-## Objc Completions ##
+## Objc/Swift Completions ##
 
-Function `docsetutil-objc-completions` provides a decent source for
-objc completion. It is not true code completion but extremely fast and
-can save you a lot of typing. Improvement expected in this area.
+Function `docsetutil-completions` provides a decent source for
+objc/swift completion. It is not true code completion but extremely
+fast and can save you a lot of typing. Improvement expected in this
+area.
 
 ## hippie-exp ##
 
 If you use `hippie-expand`, you may want to add
-`try-docsetutil-objc-completions` to
-`hippie-expand-try-functions-list`
+`try-docsetutil-completions` to `hippie-expand-try-functions-list`
 
     (setq hippie-expand-try-functions-list
           '(try-expand-dabbrev
             try-expand-dabbrev-all-buffers
-            try-docsetutil-objc-completions
+            try-docsetutil-completions
             try-expand-dabbrev-from-kill
             try-expand-line
             try-complete-lisp-symbol-partially

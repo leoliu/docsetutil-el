@@ -146,16 +146,14 @@ results."
                (current-buffer))
         (write-region nil nil file nil 0)))))
 
-(defun docsetutil-completions (query &optional path)
+(defun docsetutil-completions-1 (query &optional path)
   "Return a collection of names in the output of QUERY to a docset.
 Mutiple queries can be specified by seperating them with space.
 PATH is the path to the docset and defaults to
 `docsetutil-docset-path'."
   (cl-check-type query string)
-  (or path
-      docsetutil-docset-path
-      (error "No docset path provided"))
   (let ((path (or path docsetutil-docset-path)))
+    (or path (error "No docset path provided"))
     (with-temp-buffer
       (cl-assert (zerop (call-process docsetutil-program nil t nil
                                       "search" "-skip-text" "-query" query
@@ -173,8 +171,8 @@ PATH is the path to the docset and defaults to
 ;; Benchmark on an iMac 2.7 GHz Intel Core i5
 ;;  - iOS 6.0 Library: 2.76 seconds (0.18 seconds from disk cache)
 ;;  - OS X 10.8 Core Library: 8.56 seconds (0.9 seconds from disk cache)
-(defun docsetutil-objc-completions (&optional docset)
-  "Return completions for C and Objective-C."
+(defun docsetutil-completions (&optional docset)
+  "Return completions for C, C++, Objective-C and Swift."
   (let* ((docset (or docset docsetutil-docset-path))
          (cache-id (docsetutil-cache-id docset))
          (cache (if (equal (car docsetutil-cache) cache-id)
@@ -183,8 +181,8 @@ PATH is the path to the docset and defaults to
     (or cache
         (let ((coll (progn
                       (message "Prepare docset completions...")
-                      (docsetutil-completions
-                       "C/*/*/* C++/*/*/* Objective-C/*/*/*" docset))))
+                      (docsetutil-completions-1
+                       "C/*/*/* C++/*/*/* Objective-C/*/*/* swift/*/*/*" docset))))
           ;; Cache it unless empty.
           (when coll
             (setq docsetutil-cache (cons cache-id coll))
@@ -192,7 +190,7 @@ PATH is the path to the docset and defaults to
           coll))))
 
 ;;;###autoload
-(defun try-docsetutil-objc-completions (old)
+(defun try-docsetutil-completions (old)
   "A function suitable for `hippie-expand-try-functions-list'."
   (eval-and-compile (require 'hippie-exp))
   (unless old
@@ -203,7 +201,7 @@ PATH is the path to the docset and defaults to
     (setq he-expand-list
           (and (not (equal he-search-string ""))
                (sort (all-completions he-search-string
-                                      (docsetutil-objc-completions))
+                                      (docsetutil-completions))
                      #'string-lessp))))
   (if (null he-expand-list)
       (progn
@@ -408,7 +406,7 @@ docset to view."
   (let ((buf (or buf " *docsetutil cc mode*")))
     (or (get-buffer buf)
         (with-current-buffer (get-buffer-create buf)
-          (objc-mode)
+          (objc-mode)                   ;XXX may not work for swift
           (setq font-lock-mode t)
           (funcall font-lock-function font-lock-mode)
           (add-hook 'change-major-mode-hook 'font-lock-change-mode nil t)
@@ -539,7 +537,7 @@ The default value for BUFFER is current buffer."
       (format (if default "Apple docset %s search (default: %s): "
                 "Apple docset %s search: ")
               (if fulltext "full text" "API") default)
-      (docsetutil-objc-completions)
+      (docsetutil-completions)
       nil nil nil 'docsetutil-search-history default))))
 
 (define-obsolete-function-alias 'docsetutil-search 'docsetutil-api "2014-05-05")
