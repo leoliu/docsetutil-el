@@ -1,9 +1,10 @@
 ;;; docsetutil.el --- use Cocoa/iOS documentations in emacs  -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2011-2014  Leo Liu
+;; Copyright (C) 2011-2016  Leo Liu
 
 ;; Author: Leo Liu <sdl.web@gmail.com>
-;; Version: 0.7
+;; Version: 0.8
+;; Package-Requires: ((emacs "24.4"))
 ;; Keywords: c, processes, tools, docs
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -26,10 +27,6 @@
 
 (require 'cl-lib)
 (require 'url-parse)
-
-(eval-and-compile
-  (unless (fboundp 'user-error)
-    (defalias 'user-error 'error)))
 
 (defgroup docsetutil nil
   "Group for docsetutil."
@@ -268,62 +265,57 @@ are strings."
   "Find all docsets in PATHS.
 Each item in the return value has the form:
   (Fullpath CFBundleIdentifier CFBundleName Info)."
-  (apply 'append
-         (mapcar (lambda (path)
-                   (mapcar (lambda (d)
-                             (let* ((info (docsetutil-parse-docset-info d))
-                                    (id (cdr (assoc "CFBundleIdentifier" info)))
-                                    (name (cdr (assoc "CFBundleName" info))))
-                               (cl-list* d id name info)))
-                           (directory-files path t "\\.docset\\'")))
-                 (cl-loop for p in (or paths docsetutil-docset-search-paths)
-                          when (file-directory-p p) collect p))))
+  (cl-mapcan (lambda (path)
+               (mapcar (lambda (d)
+                         (let* ((info (docsetutil-parse-docset-info d))
+                                (id (cdr (assoc "CFBundleIdentifier" info)))
+                                (name (cdr (assoc "CFBundleName" info))))
+                           (cl-list* d id name info)))
+                       (directory-files path t "\\.docset\\'")))
+             (cl-loop for p in (or paths docsetutil-docset-search-paths)
+                      when (file-directory-p p) collect p)))
 
-(defun docsetutil-view-docset-info (docset &optional all)
+(defun docsetutil-view-docset-info (docset)
   "View DOCSET information.
 When called interactively with no prefix, view current docset;
 with two prefixes, view all docsets; otherwise ask the user for a
 docset to view."
   (interactive
-   (list (if (or (not docsetutil-docset-path)
-                 (and current-prefix-arg
-                      (/= (prefix-numeric-value current-prefix-arg) 16)))
-             (completing-read "Docset: " (docsetutil-find-all-docsets))
-           docsetutil-docset-path)
-         (= (prefix-numeric-value current-prefix-arg) 16)))
-  (or docset (error "No docset provided"))
-  (let ((docset (if (stringp docset)
-                    (assoc docset (docsetutil-find-all-docsets))
-                  docset))
-        (fmt-docset
-         (lambda (doc)
-           (with-current-buffer standard-output
-             (insert (propertize (format "[From %s]"
-                                         (file-name-directory (car doc)))
-                                 'face 'font-lock-comment-face) "\n\n")
-             (insert (propertize (file-name-nondirectory (car doc))
-                                 'face 'bold-italic) ":\n\n")
-             (when (cl-cdddr doc)
-               (cl-loop for (k . v) in (cl-cdddr doc)
-                        with fmt = (format "%%%ds: "
-                                           (apply 'max
-                                                  (mapcar (lambda (x)
-                                                            (length (car x)))
-                                                          (cl-cdddr doc))))
-                        do
-                        (insert (propertize (format fmt k) 'face 'bold))
-                        (insert (cond
-                                 ((consp v) (mapconcat 'identity v " "))
+   (list (pcase (prefix-numeric-value current-prefix-arg)
+           (16 'all)
+           ((and 1 (guard docsetutil-docset-path)) docsetutil-docset-path)
+           (_ (completing-read "Docset: " (docsetutil-find-all-docsets))))))
+  (cl-etypecase docset
+    (null (error "Docset not found"))
+    (symbol (with-output-to-temp-buffer "*DocsetInfo*"
+              (mapc #'docsetutil-print-docset-info (docsetutil-find-all-docsets))))
+    (string (docsetutil-view-docset-info
+             (assoc docset (docsetutil-find-all-docsets))))
+    (cons (with-output-to-temp-buffer "*DocsetInfo*"
+            (docsetutil-print-docset-info docset)))))
+
+(defun docsetutil-print-docset-info (docset)
+  (cl-check-type docset cons)
+  (with-current-buffer standard-output
+    (pcase-let ((`(,dir ,_ ,_ . ,info) docset))
+      (insert (propertize (format "[From %s]" (file-name-directory dir))
+                          'face 'font-lock-comment-face) "\n\n")
+      (insert (propertize (file-name-nondirectory dir) 'face 'bold-italic)
+              ":\n\n")
+      (when info
+        (let ((fmt (format "%%%ds: "
+                           (apply #'max
+                                  (mapcar (lambda (x) (length (car x))) info)))))
+          (cl-loop for (k . v) in info do
+                   (insert (propertize (format fmt k) 'face 'bold))
+                   (insert (cond ((consp v) (mapconcat 'identity v " "))
                                  ((stringp v) v)
-                                 (t "(none)")) "\n")))
-             (insert (make-string 75 ?-) "\n\n")))))
-    (with-output-to-temp-buffer "*DocsetInfo*"
-      (if all (mapc fmt-docset (docsetutil-find-all-docsets))
-        (funcall fmt-docset docset)))))
+                                 (t "(none)")) "\n")))))
+    (insert (make-string 75 ?-) "\n\n")))
 
 (defun docsetutil-read-docset ()
   (save-window-excursion
-    (let ((docsets (docsetutil-find-all-docsets))
+    (let ((docsets (or (docsetutil-find-all-docsets) (error "No docsets found")))
           (split-width-threshold nil)
           (buf " *docsets*")
           (i 0)
